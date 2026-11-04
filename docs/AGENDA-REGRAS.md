@@ -13,7 +13,7 @@ contorná-las chamando a API diretamente.
 | Intervalo entre horários | 15 min | Grade de inícios possíveis (09:00, 09:15...) |
 | Pendentes expiram em | 24 h | Pedido não confirmado nesse prazo vira **expirado** e libera o horário |
 | Horários em aberto por cliente | 3 | Máximo de pendentes + confirmados futuros por conta |
-| Pedidos por hora | 6 | Limite anti-abuso por conta |
+| Pedidos por hora | 6 | Limite anti-abuso: pedidos feitos pelo próprio cliente (lançamentos do painel não contam) |
 | Cliente cancela até | 60 min antes | Depois disso, só a barbearia cancela |
 | Falta faz perder a cortesia | sim | Ver [PROGRAMA-FIDELIDADE.md](PROGRAMA-FIDELIDADE.md) |
 

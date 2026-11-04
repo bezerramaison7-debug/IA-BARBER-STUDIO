@@ -576,8 +576,9 @@ begin
       and a.status in ('pendente', 'confirmado') and a.starts_at > now()) >= s.max_active_requests then
     perform public._fail('limite_ativos', 'Você já tem o máximo de horários em aberto. Cancele um ou aguarde a confirmação.');
   end if;
+  -- Conta só os pedidos feitos pelo próprio cliente: lançamentos do painel em nome dele não bloqueiam.
   if (select count(*) from public.appointments a where a.customer_id = v_customer
-      and a.created_at > now() - interval '1 hour') >= s.max_requests_per_hour then
+      and a.created_by = v_customer and a.created_at > now() - interval '1 hour') >= s.max_requests_per_hour then
     perform public._fail('limite_hora', 'Muitas solicitações em pouco tempo. Tente novamente mais tarde.');
   end if;
 

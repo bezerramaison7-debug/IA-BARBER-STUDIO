@@ -243,6 +243,21 @@ describe("desfazer o 10º atendimento depois da recompensa (política atual; dec
   });
 });
 
+describe("limite de pedidos por hora", () => {
+  it("atendimentos lançados pelo painel não contam no limite do cliente", async () => {
+    const c = await createUser(db.su);
+    for (let i = 0; i < 10; i++) await visit(c, "corte-classico"); // gera 1 cortesia
+    const { rows } = await db.su.query("select id from public.loyalty_rewards where customer_id = $1 and status = 'disponivel'", [c]);
+    const r = await asUser<{ status: string }>(c, "public.request_appointment('corte-classico', $1, $2, $3, $4)", [
+      await at(db.su, await localDay(db.su, 11), "10:00"),
+      uuid(),
+      cat.barberA,
+      rows[0].id,
+    ]);
+    expect(r.status).toBe("pendente");
+  });
+});
+
 describe("exclusão definitiva (LGPD)", () => {
   it("apagar o usuário no Auth remove a conta e o histórico pessoal; agenda e auditoria ficam sem identificação", async () => {
     const c = await createUser(db.su);
