@@ -133,6 +133,24 @@ site.config.ts tem 3 problema(s) a corrigir antes de publicar:
 3. Corrija até o build passar. Os avisos (afirmações comerciais) não bloqueiam, mas revise cada um.
 4. Siga o [checklist de publicação e LGPD](CHECKLIST-PUBLICACAO-LGPD.md).
 
+## 9. Agendamento online (plano Profissional)
+
+Só se o cliente contratou o sistema da V3. Além dos passos acima:
+
+1. Confirme as informações comerciais com o cliente **antes** de configurar: nome do programa de
+   fidelidade, regras dos cartões, prazos de cancelamento e de confirmação. Não preencha nada por
+   suposição (nome, razão social, CNPJ ou número).
+2. `plan: "profissional"` e `legal.emailProvider` no `site.config.ts`.
+3. Crie o projeto Supabase, aplique as migrações e os dados reais, configure Auth e SMTP:
+   [HOSPEDAGEM.md](HOSPEDAGEM.md).
+4. Variáveis do Supabase na hospedagem (chave publishable, nunca a secreta).
+5. Crie o primeiro administrador e configure pelo painel: WhatsApp oficial, profissionais, serviços,
+   expediente, feriados e programa de fidelidade ([MANUAL-ADMIN.md](MANUAL-ADMIN.md)).
+6. Siga a seção 7 do [checklist](CHECKLIST-PUBLICACAO-LGPD.md).
+
+Os horários e as regras da agenda ficam no banco e são mudados pelo painel. O `hours` do
+`site.config.ts` continua sendo o horário **exibido** na página. Mantenha os dois coerentes.
+
 ## Comandos úteis
 
 ```bash

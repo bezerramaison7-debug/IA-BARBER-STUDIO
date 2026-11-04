@@ -10,16 +10,19 @@ textos: português do Brasil.
 
 - `npm run dev` · `npm run build` · `npm start`
 - `npm run lint` · `npm run typecheck` · `npm test` (Vitest, ambiente happy-dom)
-- Rode lint, typecheck, test e build antes de commitar. O CI (`.github/workflows/ci.yml`) roda os quatro.
+- `npm run test:db`: banco da V3 num Postgres (`TEST_DATABASE_URL`, ver `docs/TESTES-V3.md`)
+- Rode lint, typecheck, test e build (e `test:db` se mexer em `supabase/`) antes de commitar. O CI roda todos.
 
 ## Arquitetura
 
 - `src/config/site.config.ts` é a **única fonte de dados do cliente**. Componentes recebem
   `config: SiteConfig` (e `texts: SiteTexts`) por props; não espalhe dados de cliente em componentes.
   Campo novo → `src/config/types.ts` (com comentário), o config e, se tiver regra, `src/lib/validate-config.ts`.
-- **Textos de interface** ficam em `src/config/texts.ts` e são lidos com `getTexts(config)`; nunca
-  escreva título, botão ou rótulo direto no componente. Exceção: avisos que só existem com `demo: true`.
-- **Planos**: `getFeatures(config)` em `src/lib/plan.ts` decide o que aparece (essencial × premium).
+- **Textos de interface** ficam em `src/config/texts.ts` (site, via `getTexts(config)`) e
+  `src/config/texts-app.ts` (sistema da V3); nunca escreva título, botão ou rótulo direto no componente.
+  Exceção: avisos que só existem com `demo: true`.
+- **Planos**: `getFeatures(config)` em `src/lib/plan.ts` decide o que aparece (essencial × premium ×
+  profissional). O sistema da V3 só liga com `isBookingSystemEnabled` (plano + variáveis do Supabase).
   Recurso novo de um plano → nova flag em `Features`, nunca um segundo projeto ou cópia de componente.
 - **Validação**: `validateSiteConfig` roda no build (`layout.tsx`) e nos testes. Regra de negócio sobre o
   config (o que é obrigatório para site real) vai lá, com teste em `validate-config.test.ts`.
@@ -28,6 +31,20 @@ textos: português do Brasil.
 - Âncoras da home (`#servicos`, `#precos`, `#equipe`, `#galeria`, `#agendar`, `#duvidas`, `#contato`) e
   o menu por plano: `src/lib/navigation.ts`. Páginas de serviço: `src/app/servicos/[slug]`, com 404
   real via `src/proxy.ts`.
+
+## Sistema da V3 (Supabase)
+
+- **Toda regra de negócio fica no banco** (`supabase/migrations/`): o navegador usa só a chave pública.
+  A tela nunca é a única barreira. Leia `docs/ARQUITETURA-V3.md` antes de mudar agenda ou fidelidade.
+- Tabela nova: RLS ligado, permissões explícitas em `..._permissoes.sql` e teste em
+  `supabase/tests/seguranca.test.ts`. Escrita em agendamentos, pontos e recompensas só por função
+  `SECURITY DEFINER` com `set search_path = ''`; erros com `public._fail(código, mensagem em pt-BR)`.
+- Migração já aplicada em algum projeto real não se edita: crie outra. Migração em produção só com aprovação.
+- Nunca use a chave secreta/`service_role` no site, em `NEXT_PUBLIC_*`, em commits ou logs.
+- Mensagem de confirmação: `buildConfirmationUrl` (`src/lib/booking/whatsapp-confirmation.ts`). Abrir o
+  WhatsApp nunca confirma: só o painel muda status.
+- Testes de banco e de tela só com dados fictícios (`@example.com`). Fora do escopo: pagamentos de
+  qualquer tipo, mensageria paga, app nativo.
 
 ## Regras do Next.js desta versão
 
@@ -61,9 +78,9 @@ textos: português do Brasil.
   existe; sem promessas de resultado, tempo de espera ou superioridade (o build avisa em `RISKY_CLAIMS`).
 - Enquanto `demo: true`, mantenha os avisos de conteúdo fictício e o `noindex`.
 - Não adicione `aggregateRating`/`review` ao JSON-LD sem avaliações reais verificáveis.
-- O formulário não envia dados a servidor; mantenha assim (LGPD) salvo pedido explícito. A política em
-  `src/app/privacidade/page.tsx` descreve o comportamento real: cookie, analytics ou formulário com
-  backend novos exigem reescrevê-la.
+- O formulário da V2 não envia dados a servidor; mantenha assim (LGPD). As políticas
+  (`/privacidade`, `/cookies`, `/termos`) descrevem o comportamento real e mudam com
+  `isBookingSystemEnabled`: cookie, analytics ou coleta de dados nova exigem reescrevê-las.
 
 ## Dependências
 

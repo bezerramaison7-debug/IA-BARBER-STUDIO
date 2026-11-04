@@ -1,4 +1,4 @@
-# Planos: Essencial e Premium
+# Planos: Essencial, Premium e Profissional (proposta)
 
 Os dois planos são **o mesmo projeto**: o campo `plan` do `site.config.ts` liga e desliga recursos.
 Correções e melhorias valem para os dois. A regra está em `src/lib/plan.ts`.
@@ -81,3 +81,32 @@ Ao mudar cores, confira o contraste (mínimo 4.5:1) em
 1. Preencha `team`, `faq` e, se houver conteúdo, `page` nos serviços.
 2. Troque `plan: "essencial"` por `plan: "premium"`.
 3. Rode `npm test` e `npm run build`, revise e publique.
+
+## Profissional (proposta da V3)
+
+> **Decisão comercial pendente.** O nome, o preço e o que entra neste plano são sugestões. O código
+> já trata o plano como `profissional` e pode ser renomeado sem mudar a lógica.
+
+Tudo do Premium, mais o sistema de agendamento:
+
+| Recurso | Profissional |
+| --- | :---: |
+| Conta do cliente (nome, telefone, e-mail e senha), confirmação de e-mail e recuperação de senha | ✓ |
+| Agendamento online em tempo real: serviço → profissional → data → horário → solicitar | ✓ |
+| Solicitação pendente com protocolo e mensagem pronta no WhatsApp (sem API paga) | ✓ |
+| Minha conta: horários, cancelar/reagendar, histórico, dados, exportação LGPD | ✓ |
+| Painel: confirmar, concluir, faltas, agenda do dia e da semana, agendamento manual | ✓ |
+| Horários pelo painel: expediente, almoço, folgas, feriados, férias e bloqueios por profissional | ✓ |
+| Programa de fidelidade com cartões separados, cortesias e livro-razão auditável | ✓ |
+| Políticas de privacidade, cookies e termos ajustadas ao sistema de contas | ✓ |
+
+Liga quando `plan: "profissional"` (ou `SITE_PLAN=profissional`) **e** o Supabase está configurado.
+Sem o Supabase, o site se comporta como Premium. Custos recorrentes possíveis (hospedagem, banco,
+e-mail, domínio) estão em [HOSPEDAGEM.md](HOSPEDAGEM.md). Instalação e manual:
+[ARQUITETURA-V3.md](ARQUITETURA-V3.md), [MANUAL-ADMIN.md](MANUAL-ADMIN.md).
+
+### Upgrade de Premium para Profissional
+
+1. Crie e configure o projeto Supabase do cliente ([HOSPEDAGEM.md](HOSPEDAGEM.md#supabase-free)).
+2. Defina as variáveis na hospedagem e `plan: "profissional"`.
+3. Siga a seção 7 do [checklist](CHECKLIST-PUBLICACAO-LGPD.md).
