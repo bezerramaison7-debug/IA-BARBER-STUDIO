@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { appTexts } from "@/config/texts-app";
 import { WhatsAppIcon } from "@/components/ui/icons";
-import { admin, type Appointment, type Conflict } from "@/lib/booking/api";
+import { admin, auth, type Appointment, type Conflict } from "@/lib/booking/api";
 import { dayKey, formatDate, formatTime } from "@/lib/booking/datetime";
 import { ACTION_LABEL, ADMIN_TRANSITIONS, needsReason, type AppointmentStatus } from "@/lib/booking/domain";
 import { friendlyError } from "@/lib/booking/errors";
@@ -24,11 +24,20 @@ const NAV = [
   { href: "/admin/privacidade", label: t.nav.privacy },
 ];
 
+function SignOutButton() {
+  const router = useRouter();
+  return (
+    <ActionButton variant="ghost" onClick={() => void auth.signOut().finally(() => router.replace("/entrar"))}>
+      {appTexts.nav.signOut}
+    </ActionButton>
+  );
+}
+
 /** Casca do painel: exige admin (conferido no banco) e oferece navegação rolável no celular. */
 export function AdminShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   return (
-    <RequireAuth admin>
+    <RequireAuth admin denied={<div className="grid gap-4"><Notice tone="error">{t.denied}</Notice><SignOutButton /></div>}>
       <nav aria-label={t.navLabel} className="-mx-5 mb-8 overflow-x-auto border-b border-line px-5">
         <ul className="flex min-w-max gap-1">
           {NAV.map((item) => {
@@ -48,6 +57,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
         </ul>
       </nav>
       {children}
+      <div className="mt-12 border-t border-line pt-4"><SignOutButton /></div>
     </RequireAuth>
   );
 }

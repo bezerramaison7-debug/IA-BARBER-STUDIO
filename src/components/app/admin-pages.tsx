@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { appTexts } from "@/config/texts-app";
 import {
   admin,
@@ -9,22 +9,25 @@ import {
   type Barber,
   type BusinessSettings,
   type Conflict,
+  type Customer,
   type CustomerSheet,
   type LoyaltyRule,
   type PrivacyRequest,
-  type Profile,
   type ScheduleException,
   type ScheduleRow,
   type Service,
 } from "@/lib/booking/api";
 import { addDays, dayKey, formatDate, formatDayKey, formatLongDate, formatTime, localToIso } from "@/lib/booking/datetime";
-import { loyaltyCardText } from "@/lib/booking/domain";
-import { friendlyError } from "@/lib/booking/errors";
+import { loyaltyCardText, phoneDigits, validateContact } from "@/lib/booking/domain";
+import { errorCode, friendlyError } from "@/lib/booking/errors";
+import { formatBrPhone } from "@/lib/booking/whatsapp-confirmation";
 import { isValidBrazilianWhatsApp } from "@/lib/whatsapp";
 import { WEEKDAY_NAMES } from "@/lib/format";
 import { useAuth } from "./auth-context";
 import { useAsync } from "./use-async";
 import { AppointmentItem, ConflictDecision } from "./admin-shared";
+import { NewPasswordForm } from "./auth-forms";
+import { CustomerPicker, type Picked } from "./customer-picker";
 import { ActionButton, Card, Field, Notice, PageTitle, SectionTitle, SelectInput, StatusBadge, TextArea, TextInput } from "./ui";
 
 const t = appTexts.admin;
@@ -41,6 +44,113 @@ function useLoader<T>(fn: () => Promise<T>) {
 }
 
 const today = () => dayKey(new Date());
+const newKey = () => crypto.randomUUID();
+
+/** Cortesia disponível do cliente para o serviço escolhido (cartão cuja recompensa é esse serviço). */
+function useEligibleReward(picked: Picked | null, serviceId: string) {
+  const customerId = picked?.kind === "customer" ? picked.customer.id : null;
+  const sheet = useAsync(customerId ? `ficha|${customerId}` : null, () => admin.customer(customerId!));
+  return useMemo(() => {
+    if (!sheet.data || !serviceId) return null;
+    const rules = new Set(sheet.data.fidelidade.filter((c) => c.reward_service_id === serviceId).map((c) => c.rule_id));
+    return sheet.data.recompensas.find((r) => r.status === "disponivel" && rules.has(r.rule_id)) ?? null;
+  }, [sheet.data, serviceId]);
+}
+
+function useCatalogForForms() {
+  const [services, setServices] = useState<Service[]>([]);
+  const [barbers, setBarbers] = useState<Barber[]>([]);
+  useEffect(() => {
+    Promise.all([admin.allServices(), admin.allBarbers()]).then(([s, b]) => {
+      setServices(s.filter((x) => x.active));
+      setBarbers(b.filter((x) => x.active));
+    });
+  }, []);
+  return { services, barbers };
+}
+
+// ------------------------------------------------------------------ Registrar atendimento (balcão)
+/** Cliente atendido agora: entra como concluído (gera ponto) em poucos toques. */
+function QuickVisit({ onDone }: { onDone: () => void }) {
+  const { services, barbers } = useCatalogForForms();
+  const [picked, setPicked] = useState<Picked | null>(null);
+  const [serviceId, setServiceId] = useState("");
+  const [barberId, setBarberId] = useState("");
+  const [useReward, setUseReward] = useState(false);
+  const [msg, setMsg] = useState<Msg>(null);
+  const [busy, setBusy] = useState(false);
+  const key = useRef(newKey());
+  const service = services.find((s) => s.id === (serviceId || services[0]?.id));
+  const barber = barberId || barbers[0]?.id || "";
+  const reward = useEligibleReward(picked, service?.id ?? "");
+
+  async function register() {
+    if (!picked || !service || !barber) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      // Atendimento que acabou de terminar: começa "duração" minutos atrás (múltiplo de 5).
+      const end = Math.floor(Date.now() / 300_000) * 300_000;
+      await admin.createAppointment({
+        serviceId: service.id,
+        barberId: barber,
+        start: new Date(end - service.duration_minutes * 60_000).toISOString(),
+        customerId: picked.kind === "customer" ? picked.customer.id : null,
+        guestName: picked.kind === "guest" ? picked.name : null,
+        guestPhone: picked.kind === "guest" ? picked.phone || null : null,
+        status: "concluido",
+        force: true,
+        rewardId: useReward && reward ? reward.id : null,
+        requestKey: key.current,
+      });
+      key.current = newKey();
+      setMsg({ tone: "success", text: t.visitDone });
+      setPicked(null);
+      setUseReward(false);
+      onDone();
+    } catch (err) {
+      setMsg({ tone: "error", text: errorCode(err) === "ocupado" ? t.visitBusy : friendlyError(err) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card>
+      <SectionTitle>{t.quickVisit}</SectionTitle>
+      <p className="mt-1 text-sm text-muted">{t.quickVisitIntro}</p>
+      <div className="mt-4 grid gap-4">
+        <CustomerPicker value={picked} onChange={setPicked} allowWalkIn />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label={appTexts.booking.service}>
+            {(p) => (
+              <SelectInput {...p} value={service?.id ?? ""} onChange={(e) => setServiceId(e.target.value)}>
+                {services.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </SelectInput>
+            )}
+          </Field>
+          <Field label={appTexts.booking.barber}>
+            {(p) => (
+              <SelectInput {...p} value={barber} onChange={(e) => setBarberId(e.target.value)}>
+                {barbers.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </SelectInput>
+            )}
+          </Field>
+        </div>
+        {picked?.kind === "customer" && (reward ? (
+          <label className="flex min-h-11 cursor-pointer items-center gap-3">
+            <input type="checkbox" checked={useReward} onChange={(e) => setUseReward(e.target.checked)} className="size-5 accent-[var(--brand-accent)]" />
+            {t.useReward}
+          </label>
+        ) : <p className="text-sm text-muted">{t.noReward}</p>)}
+        {msg && <Notice tone={msg.tone}>{msg.text}</Notice>}
+        <ActionButton onClick={register} disabled={busy || !picked || !service || !barber} className="min-h-14 w-full text-lg sm:w-auto">
+          {busy ? appTexts.common.saving : t.registerVisit}
+        </ActionButton>
+      </div>
+    </Card>
+  );
+}
 
 // ------------------------------------------------------------------ Hoje
 export function AdminToday() {
@@ -58,6 +168,7 @@ export function AdminToday() {
     <div className="grid gap-10">
       <PageTitle intro={<span>{formatLongDate(localToIso(day, "12:00"))}</span>}>{t.title}</PageTitle>
       {stats.error && <Notice tone="error">{stats.error}</Notice>}
+      <QuickVisit onDone={reload} />
       <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {Object.entries(t.stats).map(([key, label]) => (
           <div key={key} className="rounded-sm border border-line bg-surface p-4">
@@ -121,33 +232,38 @@ export function AdminAgenda() {
 }
 
 function ManualAppointment({ onCreated }: { onCreated: () => void }) {
-  const [services, setServices] = useState<Service[]>([]);
-  const [barbers, setBarbers] = useState<Barber[]>([]);
-  const [customers, setCustomers] = useState<Profile[]>([]);
+  const { services, barbers } = useCatalogForForms();
+  const [picked, setPicked] = useState<Picked | null>(null);
+  const [serviceId, setServiceId] = useState("");
+  const [useReward, setUseReward] = useState(false);
   const [msg, setMsg] = useState<Msg>(null);
-  useEffect(() => {
-    Promise.all([admin.allServices(), admin.allBarbers()]).then(([s, b]) => {
-      setServices(s.filter((x) => x.active));
-      setBarbers(b.filter((x) => x.active));
-    });
-  }, []);
+  const key = useRef(newKey());
+  const service = serviceId || services[0]?.id || "";
+  const reward = useEligibleReward(picked, service);
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (!picked) return;
     const form = e.currentTarget;
     const d = new FormData(form);
     try {
       const r = await admin.createAppointment({
-        serviceId: String(d.get("service")),
+        serviceId: service,
         barberId: String(d.get("barber")),
         start: localToIso(String(d.get("day")), String(d.get("time"))),
-        customerId: String(d.get("customer") || "") || null,
-        guestName: String(d.get("guest") || "") || null,
-        guestPhone: String(d.get("guestPhone") || "") || null,
-        notes: null,
+        customerId: picked.kind === "customer" ? picked.customer.id : null,
+        guestName: picked.kind === "guest" ? picked.name : null,
+        guestPhone: picked.kind === "guest" ? picked.phone || null : null,
+        status: d.get("status") === "pendente" ? "pendente" : "confirmado",
+        notes: String(d.get("notes") ?? "").trim() || null,
+        rewardId: useReward && reward ? reward.id : null,
+        requestKey: key.current,
       });
-      setMsg({ tone: "success", text: `${appTexts.booking.protocol} ${r.protocol}` });
+      key.current = newKey();
+      setMsg({ tone: "success", text: `${t.created} ${r.protocol}` });
       form.reset();
+      setPicked(null);
+      setUseReward(false);
       onCreated();
     } catch (err) {
       setMsg({ tone: "error", text: friendlyError(err) });
@@ -156,11 +272,14 @@ function ManualAppointment({ onCreated }: { onCreated: () => void }) {
 
   return (
     <Card>
+      <span id="registrar" />
       <SectionTitle>{t.newAppointment}</SectionTitle>
+      <p className="mt-1 text-sm text-muted">{t.newAppointmentIntro}</p>
+      <div className="mt-4"><CustomerPicker value={picked} onChange={setPicked} allowWalkIn /></div>
       <form onSubmit={onSubmit} className="mt-4 grid gap-4 sm:grid-cols-2">
         <Field label={appTexts.booking.service}>
           {(p) => (
-            <SelectInput {...p} name="service" required>
+            <SelectInput {...p} value={service} onChange={(e) => setServiceId(e.target.value)} required>
               {services.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </SelectInput>
           )}
@@ -174,23 +293,27 @@ function ManualAppointment({ onCreated }: { onCreated: () => void }) {
         </Field>
         <Field label={appTexts.booking.date}>{(p) => <TextInput {...p} name="day" type="date" required defaultValue={today()} />}</Field>
         <Field label={appTexts.booking.time}>{(p) => <TextInput {...p} name="time" type="time" step={300} required />}</Field>
-        <Field label={t.customer}>
+        <Field label={t.statusChoice}>
           {(p) => (
-            <>
-              <TextInput placeholder={t.search} onChange={(e) => admin.searchCustomers(e.target.value).then(setCustomers).catch(() => {})} aria-label={t.search} />
-              <SelectInput {...p} name="customer" defaultValue="">
-                <option value="">—</option>
-                {customers.map((c) => <option key={c.id} value={c.id}>{c.full_name} · {c.phone}</option>)}
-              </SelectInput>
-            </>
+            <SelectInput {...p} name="status" defaultValue="confirmado">
+              <option value="confirmado">{t.statusConfirmed}</option>
+              <option value="pendente">{t.statusPending}</option>
+            </SelectInput>
           )}
         </Field>
-        <div className="grid gap-4">
-          <Field label={t.guest}>{(p) => <TextInput {...p} name="guest" />}</Field>
-          <Field label={t.guestPhone}>{(p) => <TextInput {...p} name="guestPhone" type="tel" />}</Field>
-        </div>
+        <Field label={appTexts.booking.notes}>{(p) => <TextInput {...p} name="notes" maxLength={500} />}</Field>
+        {picked?.kind === "customer" && (
+          <div className="sm:col-span-2">
+            {reward ? (
+              <label className="flex min-h-11 cursor-pointer items-center gap-3">
+                <input type="checkbox" checked={useReward} onChange={(e) => setUseReward(e.target.checked)} className="size-5 accent-[var(--brand-accent)]" />
+                {t.useReward}
+              </label>
+            ) : <p className="text-sm text-muted">{t.noReward}</p>}
+          </div>
+        )}
         {msg && <div className="sm:col-span-2"><Notice tone={msg.tone}>{msg.text}</Notice></div>}
-        <div className="sm:col-span-2"><ActionButton type="submit">{t.create}</ActionButton></div>
+        <div className="sm:col-span-2"><ActionButton type="submit" disabled={!picked} className="min-h-14 w-full text-lg sm:w-auto">{t.create}</ActionButton></div>
       </form>
     </Card>
   );
@@ -428,44 +551,65 @@ function Exceptions({ barbers }: { barbers: Barber[] }) {
 // ------------------------------------------------------------------ Clientes e fidelidade
 export function AdminCustomers() {
   const [term, setTerm] = useState("");
-  const [results, setResults] = useState<Profile[]>([]);
+  const [results, setResults] = useState<Customer[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const id = setTimeout(() => admin.searchCustomers(term).then(setResults).catch((e) => setError(friendlyError(e))), 250);
     return () => clearTimeout(id);
-  }, [term]);
+  }, [term, selected]);
+
+  if (selected) return <CustomerSheetView id={selected} onBack={() => setSelected(null)} onOpen={setSelected} />;
 
   return (
     <div className="grid gap-8">
       <PageTitle>{t.customersTitle}</PageTitle>
+      {creating ? (
+        <Card>
+          <SectionTitle>{t.newCustomer}</SectionTitle>
+          <div className="mt-4">
+            <CustomerPicker value={null} startNew onChange={(v) => { if (v?.kind === "customer") { setCreating(false); setSelected(v.customer.id); } }} />
+          </div>
+          <ActionButton variant="ghost" onClick={() => setCreating(false)} className="mt-3">{appTexts.common.cancel}</ActionButton>
+        </Card>
+      ) : (
+        <ActionButton onClick={() => setCreating(true)} className="min-h-14 self-start text-lg">{t.newCustomer}</ActionButton>
+      )}
       <Field label={t.search}>{(p) => <TextInput {...p} type="search" value={term} onChange={(e) => setTerm(e.target.value)} />}</Field>
       {error && <Notice tone="error">{error}</Notice>}
-      {selected ? (
-        <CustomerSheetView id={selected} onBack={() => setSelected(null)} />
-      ) : (
-        <ul className="divide-y divide-line border-y border-line">
-          {results.map((c) => (
-            <li key={c.id}>
-              <button type="button" onClick={() => setSelected(c.id)} className="flex min-h-14 w-full flex-wrap items-center justify-between gap-2 py-3 text-left hover:text-accent">
-                <span className="font-semibold">{c.full_name}{c.role === "admin" && " · admin"}</span>
-                <span className="text-sm text-muted">{c.phone} · {c.email}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+      {results.length === 0 && <p className="text-muted">{t.noResults}</p>}
+      <ul className="divide-y divide-line border-y border-line">
+        {results.map((c) => (
+          <li key={c.id}>
+            <button type="button" onClick={() => setSelected(c.id)} className="flex min-h-14 w-full flex-wrap items-center justify-between gap-2 py-3 text-left hover:text-accent">
+              <span className="font-semibold">{c.full_name}</span>
+              <span className="text-sm text-muted">{formatBrPhone(c.phone)}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
 
-function CustomerSheetView({ id, onBack }: { id: string; onBack: () => void }) {
-  const { profile: me } = useAuth();
+function downloadJson(name: string, data: unknown) {
+  const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function CustomerSheetView({ id, onBack, onOpen }: { id: string; onBack: () => void; onOpen: (id: string) => void }) {
   const sheet = useLoader(useCallback(() => admin.customer(id), [id]));
   const [msg, setMsg] = useState<Msg>(null);
+  const [editErrors, setEditErrors] = useState<Partial<Record<"fullName" | "phone", string>>>({});
   const s: CustomerSheet | null = sheet.data;
   if (!s) return <p className="text-muted">{sheet.error ?? appTexts.common.loading}</p>;
+  const c = s.cliente;
 
   async function act(fn: () => Promise<unknown>, ok: string) {
     try {
@@ -483,35 +627,89 @@ function CustomerSheetView({ id, onBack }: { id: string; onBack: () => void }) {
     void act(() => admin.adjustLoyalty(id, ruleId, Number(d.get("delta")), String(d.get("reason") ?? "")), appTexts.admin.saved);
   }
 
+  function edit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const d = new FormData(e.currentTarget);
+    const input = { fullName: String(d.get("full_name") ?? ""), phone: String(d.get("phone") ?? "") };
+    const errs = validateContact(input);
+    setEditErrors(errs);
+    if (Object.keys(errs).length) return;
+    void act(() => admin.saveCustomer({ id, full_name: input.fullName.trim(), phone: phoneDigits(input.phone), notes: String(d.get("notes") ?? "").trim() || null }), t.customerSaved);
+  }
+
+  async function remove() {
+    if (!window.confirm(t.deleteConfirm)) return;
+    const why = window.prompt(t.reasonPrompt);
+    if (!why) return;
+    try {
+      await admin.deleteCustomer(id, why);
+      window.alert(t.deleted);
+      onBack();
+    } catch (err) {
+      setMsg({ tone: "error", text: friendlyError(err) });
+    }
+  }
+
   return (
     <div className="grid gap-6">
       <ActionButton variant="ghost" onClick={onBack} className="self-start">{appTexts.common.back}</ActionButton>
       <Card>
-        <p className="text-2xl font-semibold">{s.perfil.full_name}</p>
-        <p className="text-muted">{s.perfil.phone} · {s.perfil.email}</p>
-        <p className="mt-1 text-sm text-muted">Cliente desde {formatDate(s.perfil.created_at)} · Marketing: {s.perfil.marketing_opt_in ? "sim" : "não"}</p>
+        <p className="text-2xl font-semibold">{c.full_name}</p>
+        <p className="text-muted">{formatBrPhone(c.phone)}</p>
+        {c.notes && <p className="mt-1">{c.notes}</p>}
+        <p className="mt-1 text-sm text-muted">{t.customerSince} {formatDate(c.created_at)}</p>
+        {s.mesmo_telefone.length > 0 && (
+          <div className="mt-4">
+            <Notice tone="warning">
+              <p>{t.sharedPhone}</p>
+              <ul className="mt-2 flex flex-wrap gap-2">
+                {s.mesmo_telefone.map((o) => (
+                  <li key={o.id}><ActionButton variant="outline" onClick={() => onOpen(o.id)}>{o.full_name}</ActionButton></li>
+                ))}
+              </ul>
+            </Notice>
+          </div>
+        )}
+        <details className="mt-4">
+          <summary className="min-h-11 cursor-pointer py-2 font-semibold">{t.editCustomer}</summary>
+          <form onSubmit={edit} noValidate className="mt-2 grid gap-3 sm:grid-cols-2">
+            <Field label={t.customerName} error={editErrors.fullName}>{(p) => <TextInput {...p} name="full_name" defaultValue={c.full_name} maxLength={120} />}</Field>
+            <Field label={t.customerPhone} error={editErrors.phone}>{(p) => <TextInput {...p} name="phone" type="tel" defaultValue={formatBrPhone(c.phone)} maxLength={20} />}</Field>
+            <div className="sm:col-span-2"><Field label={t.customerNotes}>{(p) => <TextInput {...p} name="notes" defaultValue={c.notes ?? ""} maxLength={300} />}</Field></div>
+            <div className="sm:col-span-2"><ActionButton type="submit" variant="outline">{appTexts.common.save}</ActionButton></div>
+          </form>
+        </details>
       </Card>
       {msg && <Notice tone={msg.tone}>{msg.text}</Notice>}
 
       <section aria-labelledby="ficha-fidelidade" className="grid gap-3">
         <h2 id="ficha-fidelidade" className="font-display text-3xl font-bold uppercase">{t.loyaltyTitle}</h2>
         <div className="grid gap-3 sm:grid-cols-2">
-          {s.fidelidade.map((c) => (
-            <Card key={c.rule_id}>
-              <p className="font-semibold">{c.name}: {Math.max(0, c.points)}/{c.threshold}</p>
-              <p className="text-sm text-muted">{loyaltyCardText(c)}</p>
-              <form onSubmit={(e) => adjust(e, c.rule_id)} className="mt-3 grid gap-2">
-                <TextInput name="delta" type="number" min={-20} max={20} defaultValue={1} aria-label={t.adjust} />
-                <TextInput name="reason" placeholder={t.adjustReason} aria-label={t.adjustReason} required minLength={5} />
-                <ActionButton type="submit" variant="outline">{t.adjust}</ActionButton>
-              </form>
+          {s.fidelidade.map((card) => (
+            <Card key={card.rule_id}>
+              <p className="text-lg font-semibold">{card.name}: {Math.max(0, card.points)}/{card.threshold}</p>
+              <div className="mt-2 h-3 overflow-hidden rounded-full bg-surface-raised" aria-hidden="true">
+                <div className="h-full bg-accent" style={{ width: `${(Math.max(0, Math.min(card.points, card.threshold)) / card.threshold) * 100}%` }} />
+              </div>
+              <p className="mt-2 text-sm text-muted">{loyaltyCardText(card)}</p>
+              {card.available_rewards > 0 && <p className="mt-1 font-semibold text-accent">{t.rewardsTitle}: {card.available_rewards}</p>}
+              <details className="mt-3">
+                <summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold">{t.adjust}</summary>
+                <form onSubmit={(e) => adjust(e, card.rule_id)} className="grid gap-2">
+                  <TextInput name="delta" type="number" min={-20} max={20} defaultValue={1} aria-label={t.adjust} />
+                  <TextInput name="reason" placeholder={t.adjustReason} aria-label={t.adjustReason} required minLength={5} />
+                  <ActionButton type="submit" variant="outline">{t.adjust}</ActionButton>
+                </form>
+              </details>
             </Card>
           ))}
         </div>
+        <h3 className="mt-2 text-lg font-semibold">{t.rewardsTitle}</h3>
+        {s.recompensas.length === 0 && <p className="text-sm text-muted">{t.empty}</p>}
         <ul className="divide-y divide-line border-y border-line text-sm">
           {s.recompensas.map((r) => (
             <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
-              <span>{s.fidelidade.find((c) => c.rule_id === r.rule_id)?.reward_service_name ?? "Cortesia"} · {r.status} · {formatDate(r.created_at)}</span>
+              <span>{s.fidelidade.find((x) => x.rule_id === r.rule_id)?.reward_service_name ?? t.ruleReward} · {t.rewardStatus[r.status] ?? r.status} · {formatDate(r.created_at)}</span>
               {r.status === "disponivel" && (
                 <ActionButton variant="danger" onClick={() => { const why = window.prompt(t.reasonPrompt); if (why) void act(() => admin.cancelReward(r.id, why), t.rewardCancelled); }}>
                   {t.cancelReward}
@@ -524,18 +722,19 @@ function CustomerSheetView({ id, onBack }: { id: string; onBack: () => void }) {
           <summary className="min-h-11 cursor-pointer py-2 font-semibold">{t.entries}</summary>
           <ul className="text-sm text-muted">
             {s.lancamentos.map((e) => (
-              <li key={e.id}>{formatDate(e.created_at)} · {e.kind} · {e.delta > 0 ? `+${e.delta}` : e.delta}{e.reason && ` · ${e.reason}`}</li>
+              <li key={e.id}>{formatDate(e.created_at)} · {t.entryKinds[e.kind] ?? e.kind} · {e.delta > 0 ? `+${e.delta}` : e.delta}{e.reason && ` · ${e.reason}`}</li>
             ))}
           </ul>
         </details>
       </section>
 
       <section aria-labelledby="ficha-historico" className="grid gap-3">
-        <h2 id="ficha-historico" className="font-display text-3xl font-bold uppercase">{appTexts.account.history}</h2>
+        <h2 id="ficha-historico" className="font-display text-3xl font-bold uppercase">{t.history}</h2>
+        {s.agendamentos.length === 0 && <p className="text-sm text-muted">{t.empty}</p>}
         <ul className="divide-y divide-line border-y border-line">
           {s.agendamentos.map((a) => (
             <li key={a.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
-              <span>{formatDate(a.starts_at)} {formatTime(a.starts_at)} · {a.service_name} · {a.barber_name}</span>
+              <span>{formatDate(a.starts_at)} {formatTime(a.starts_at)} · {a.service_name}{a.is_reward && ` (${appTexts.booking.rewardFree})`} · {a.barber_name}</span>
               <StatusBadge status={a.status} />
             </li>
           ))}
@@ -543,16 +742,10 @@ function CustomerSheetView({ id, onBack }: { id: string; onBack: () => void }) {
       </section>
 
       <div className="flex flex-wrap gap-3">
-        {s.perfil.id !== me?.id && (
-          <ActionButton variant="outline" onClick={() => act(() => admin.setRole(id, s.perfil.role === "admin" ? "cliente" : "admin"), appTexts.admin.scheduleSaved)}>
-            {s.perfil.role === "admin" ? t.removeAdmin : t.makeAdmin}
-          </ActionButton>
-        )}
-        {s.perfil.id !== me?.id && (
-          <ActionButton variant="danger" onClick={() => { if (window.confirm(t.anonymizeConfirm)) { const why = window.prompt(t.reasonPrompt); if (why) void act(() => admin.anonymize(id, why), t.anonymized); } }}>
-            {t.anonymize}
-          </ActionButton>
-        )}
+        <ActionButton variant="outline" onClick={() => admin.exportCustomer(id).then((data) => downloadJson(`dados-cliente-${dayKey(new Date())}.json`, data)).catch((err) => setMsg({ tone: "error", text: friendlyError(err) }))}>
+          {t.exportData}
+        </ActionButton>
+        <ActionButton variant="danger" onClick={() => void remove()}>{t.deleteCustomer}</ActionButton>
       </div>
     </div>
   );
@@ -592,8 +785,6 @@ export function AdminSettings() {
       max_days_ahead: num("max_days_ahead"),
       slot_step_minutes: num("slot_step_minutes"),
       pending_expiry_hours: num("pending_expiry_hours"),
-      max_active_requests: num("max_active_requests"),
-      customer_cancel_notice_minutes: num("customer_cancel_notice_minutes"),
       reward_lost_on_no_show: d.get("reward_lost_on_no_show") === "on",
       loyalty_program_name: String(d.get("loyalty_program_name") ?? "").trim(),
     };
@@ -620,8 +811,6 @@ export function AdminSettings() {
               )}
             </Field>
             <Field label={t.expiry}>{(p) => <TextInput {...p} name="pending_expiry_hours" type="number" min={1} max={168} defaultValue={st.pending_expiry_hours} />}</Field>
-            <Field label={t.maxActive}>{(p) => <TextInput {...p} name="max_active_requests" type="number" min={1} max={20} defaultValue={st.max_active_requests} />}</Field>
-            <Field label={t.cancelNotice}>{(p) => <TextInput {...p} name="customer_cancel_notice_minutes" type="number" min={0} defaultValue={st.customer_cancel_notice_minutes} />}</Field>
             <Field label={t.programName}>{(p) => <TextInput {...p} name="loyalty_program_name" defaultValue={st.loyalty_program_name} />}</Field>
             <label className="flex min-h-11 cursor-pointer items-center gap-3">
               <input type="checkbox" name="reward_lost_on_no_show" defaultChecked={st.reward_lost_on_no_show} className="size-5 accent-[var(--brand-accent)]" />
@@ -709,6 +898,13 @@ export function AdminSettings() {
         </ul>
       </Card>
 
+      <TeamAccess />
+
+      <Card>
+        <SectionTitle>{appTexts.auth.resetTitle}</SectionTitle>
+        <div className="mt-4"><NewPasswordForm /></div>
+      </Card>
+
       <Card>
         <SectionTitle>{t.rules}</SectionTitle>
         <ul className="mt-4 grid gap-4">
@@ -760,11 +956,72 @@ export function AdminSettings() {
   );
 }
 
+/** Liberar ou retirar o acesso de contas da equipe (criadas no Supabase, sem cadastro público). */
+function TeamAccess() {
+  const { profile: me } = useAuth();
+  const team = useLoader(useCallback(() => admin.team(), []));
+  const [msg, setMsg] = useState<Msg>(null);
+  async function toggle(id: string, role: "admin" | "sem_acesso") {
+    try {
+      await admin.setRole(id, role);
+      setMsg({ tone: "success", text: appTexts.admin.saved });
+      team.reload();
+    } catch (err) {
+      setMsg({ tone: "error", text: friendlyError(err) });
+    }
+  }
+  return (
+    <Card>
+      <SectionTitle>{t.accessTitle}</SectionTitle>
+      <p className="mt-1 text-sm text-muted">{t.accessIntro}</p>
+      {msg && <div className="mt-3"><Notice tone={msg.tone}>{msg.text}</Notice></div>}
+      <ul className="mt-4 divide-y divide-line border-y border-line">
+        {(team.data ?? []).map((p) => (
+          <li key={p.id} className="flex flex-wrap items-center justify-between gap-2 py-3">
+            <span>
+              <strong>{p.full_name ?? p.email}</strong>{p.id === me?.id && ` (${t.you})`}
+              <span className="block text-sm text-muted">{p.email} · {t.roleLabels[p.role] ?? p.role}</span>
+            </span>
+            {p.id !== me?.id && (
+              p.role === "admin"
+                ? <ActionButton variant="danger" onClick={() => void toggle(p.id, "sem_acesso")}>{t.revoke}</ActionButton>
+                : <ActionButton variant="outline" onClick={() => void toggle(p.id, "admin")}>{t.grant}</ActionButton>
+            )}
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
 // ------------------------------------------------------------------ Privacidade e auditoria
 export function AdminPrivacy() {
   const requests = useLoader(useCallback(() => admin.privacyRequests(), []));
   const audit = useLoader(useCallback(() => admin.auditLog(), []));
   const [msg, setMsg] = useState<Msg>(null);
+  const [picked, setPicked] = useState<Picked | null>(null);
+
+  function create(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const d = new FormData(form);
+    admin
+      .createPrivacy({
+        kind: String(d.get("kind")),
+        requesterName: String(d.get("requester") ?? ""),
+        contact: String(d.get("contact") ?? ""),
+        channel: String(d.get("channel")),
+        details: String(d.get("details") ?? ""),
+        customerId: picked?.kind === "customer" ? picked.customer.id : null,
+      })
+      .then(() => {
+        setMsg({ tone: "success", text: appTexts.admin.saved });
+        form.reset();
+        setPicked(null);
+        requests.reload();
+      })
+      .catch((err) => setMsg({ tone: "error", text: friendlyError(err) }));
+  }
 
   function resolve(e: FormEvent<HTMLFormElement>, r: PrivacyRequest) {
     e.preventDefault();
@@ -772,7 +1029,7 @@ export function AdminPrivacy() {
     admin
       .resolvePrivacy(r.id, String(d.get("status")), String(d.get("resolution") ?? ""))
       .then(() => {
-        setMsg({ tone: "success", text: appTexts.admin.scheduleSaved });
+        setMsg({ tone: "success", text: appTexts.admin.saved });
         requests.reload();
       })
       .catch((err) => setMsg({ tone: "error", text: friendlyError(err) }));
@@ -780,21 +1037,48 @@ export function AdminPrivacy() {
 
   return (
     <div className="grid gap-10">
-      <PageTitle>{t.privacyTitle}</PageTitle>
+      <PageTitle intro={t.privacyIntro}>{t.privacyTitle}</PageTitle>
       {msg && <Notice tone={msg.tone}>{msg.text}</Notice>}
+      <Card>
+        <SectionTitle>{t.newRequest}</SectionTitle>
+        <form onSubmit={create} className="mt-4 grid gap-4 sm:grid-cols-2">
+          <Field label={t.kind}>
+            {(p) => (
+              <SelectInput {...p} name="kind" defaultValue="acesso">
+                {Object.entries(t.requestKinds).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </SelectInput>
+            )}
+          </Field>
+          <Field label={t.channel}>
+            {(p) => (
+              <SelectInput {...p} name="channel" defaultValue="whatsapp">
+                {Object.entries(t.channels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </SelectInput>
+            )}
+          </Field>
+          <Field label={t.requesterName}>{(p) => <TextInput {...p} name="requester" required minLength={2} maxLength={120} />}</Field>
+          <Field label={t.requestContact}>{(p) => <TextInput {...p} name="contact" maxLength={120} />}</Field>
+          <div className="sm:col-span-2"><Field label={t.details}>{(p) => <TextArea {...p} name="details" rows={2} maxLength={1000} />}</Field></div>
+          <div className="grid gap-2 sm:col-span-2">
+            <p className="text-sm font-semibold">{t.linkCustomer}</p>
+            <CustomerPicker value={picked} onChange={setPicked} />
+          </div>
+          <div className="sm:col-span-2"><ActionButton type="submit">{t.newRequest}</ActionButton></div>
+        </form>
+      </Card>
       <ul className="grid gap-4">
         {(requests.data ?? []).length === 0 && <p className="text-muted">{t.empty}</p>}
         {(requests.data ?? []).map((r) => (
           <li key={r.id}>
             <Card>
-              <p className="font-semibold">{appTexts.account.requestKinds[r.kind] ?? r.kind} · {t.statuses[r.status] ?? r.status}</p>
-              <p className="text-sm text-muted">{r.customer?.full_name} · {r.customer?.email} · {formatDate(r.created_at)}</p>
+              <p className="font-semibold">{t.requestKinds[r.kind] ?? r.kind} · {t.statuses[r.status] ?? r.status}</p>
+              <p className="text-sm text-muted">{r.requester_name}{r.contact && ` · ${r.contact}`} · {t.channels[r.channel] ?? r.channel} · {formatDate(r.created_at)}</p>
               {r.details && <p className="mt-2">{r.details}</p>}
               <form onSubmit={(e) => resolve(e, r)} className="mt-3 grid gap-3 sm:grid-cols-[12rem_1fr_auto] sm:items-end">
                 <Field label={t.status}>
                   {(p) => (
                     <SelectInput {...p} name="status" defaultValue={r.status === "aberta" ? "em_andamento" : r.status}>
-                      {["em_andamento", "concluida", "recusada"].map((s) => <option key={s} value={s}>{t.statuses[s]}</option>)}
+                      {["em_andamento", "concluida", "recusada"].map((x) => <option key={x} value={x}>{t.statuses[x]}</option>)}
                     </SelectInput>
                   )}
                 </Field>

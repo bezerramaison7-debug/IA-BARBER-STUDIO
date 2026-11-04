@@ -70,7 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 }
 
 /** Páginas que exigem login: manda para /entrar e volta para cá depois. */
-export function RequireAuth({ children, admin = false }: { children: ReactNode; admin?: boolean }) {
+export function RequireAuth({ children, admin = false, denied }: { children: ReactNode; admin?: boolean; denied?: ReactNode }) {
   const { ready, session, isAdmin } = useAuth();
   const router = useRouter();
 
@@ -82,7 +82,7 @@ export function RequireAuth({ children, admin = false }: { children: ReactNode; 
   }, [ready, session, router]);
 
   if (!ready || !session) return <p className="text-muted">{appTexts.common.loading}</p>;
-  if (admin && !isAdmin) return <Notice tone="error">{appTexts.admin.denied}</Notice>;
+  if (admin && !isAdmin) return <>{denied ?? <Notice tone="error">{appTexts.admin.denied}</Notice>}</>;
   return <>{children}</>;
 }
 
