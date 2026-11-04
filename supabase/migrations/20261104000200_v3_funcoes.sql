@@ -466,6 +466,20 @@ as $$
 $$;
 
 -- Núcleo compartilhado de criação (cliente e reagendamento). Chamado já com as travas.
+-- Trava os profissionais (mesma chave de _insert_appointment), sempre em ordem de id para que duas
+-- transações que travam vários profissionais nunca esperem uma pela outra em ciclo (deadlock).
+-- p_ids nulo = todos (expediente ou feriado global). Toda função que muda a agenda de um profissional
+-- trava ANTES de ler ou alterar linhas de agendamento.
+create or replace function public._lock_barbers(p_ids uuid[]) returns void
+language plpgsql security definer set search_path = ''
+as $$
+declare b uuid;
+begin
+  for b in select id from public.barbers where p_ids is null or id = any (p_ids) order by id loop
+    perform pg_advisory_xact_lock(hashtextextended(b::text, 0));
+  end loop;
+end $$;
+
 create or replace function public._insert_appointment(
   p_customer uuid, p_service_id text, p_barber_id uuid, p_start timestamptz,
   p_request_key uuid, p_reward_id uuid, p_notes text, p_status public.appointment_status,
@@ -539,6 +553,8 @@ declare
   v_duration integer;
 begin
   if p_request_key is null then perform public._fail('requisicao_invalida', 'Requisição inválida.'); end if;
+  -- Duas chamadas simultâneas com a mesma chave: a segunda espera a primeira e devolve o mesmo pedido.
+  perform pg_advisory_xact_lock(hashtextextended(p_request_key::text, 1));
 
   select * into v_existing from public.appointments where request_key = p_request_key;
   if found then
@@ -617,7 +633,10 @@ declare
   a record;
   v_reward uuid;
   v_row public.appointments;
+  v_old uuid;
 begin
+  select barber_id into v_old from public.appointments where id = p_appointment_id;
+  perform public._lock_barbers(array[v_old, coalesce(p_barber_id, v_old)]);
   select * into a from public.appointments where id = p_appointment_id for update;
   if not found or a.customer_id is distinct from v_customer then
     perform public._fail('nao_encontrado', 'Agendamento não encontrado.');
@@ -744,8 +763,11 @@ declare
   v_barber uuid;
   v_end timestamptz;
   v_problem text;
+  v_old uuid;
 begin
   perform public._require_admin();
+  select barber_id into v_old from public.appointments where id = p_appointment_id;
+  perform public._lock_barbers(array[v_old, coalesce(p_barber_id, v_old)]);
   select * into a from public.appointments where id = p_appointment_id for update;
   if not found then perform public._fail('nao_encontrado', 'Agendamento não encontrado.'); end if;
   if a.status not in ('pendente', 'confirmado') then
@@ -817,6 +839,10 @@ begin
     perform public._fail('acao_invalida', 'Escolha o que fazer com os agendamentos em conflito.');
   end if;
   if jsonb_typeof(p_days) <> 'array' then perform public._fail('dados_invalidos', 'Expediente inválido.'); end if;
+  -- Mesma trava das solicitações: nenhuma reserva é validada com o expediente antigo enquanto este muda,
+  -- e a lista de conflitos inclui reservas que terminaram de gravar logo antes.
+  perform public.expire_stale_appointments();
+  perform public._lock_barbers(case when p_barber_id is null then null else array[p_barber_id] end);
   begin
     for b in select id from public.barbers where (p_barber_id is null and active) or id = p_barber_id loop
       delete from public.barber_schedules where barber_id = b;
@@ -859,6 +885,8 @@ begin
   if p_conflict_action not in ('verificar', 'manter', 'cancelar') then
     perform public._fail('acao_invalida', 'Escolha o que fazer com os agendamentos em conflito.');
   end if;
+  perform public.expire_stale_appointments();
+  perform public._lock_barbers(case when p_barber_id is null then null else array[p_barber_id] end);
   begin
     insert into public.schedule_exceptions (barber_id, starts_at, ends_at, kind, reason, created_by)
     values (p_barber_id, p_starts_at, p_ends_at, p_kind, nullif(btrim(p_reason), ''), auth.uid())

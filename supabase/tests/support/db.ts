@@ -176,3 +176,42 @@ export async function errorOf(p: Promise<unknown>): Promise<{ code?: string; hin
 }
 
 export const uuid = randomUUID;
+
+/**
+ * Transação aberta com o papel dado, para testes de corrida: cada etapa roda quando o teste manda,
+ * e o `commit` também. Use um cliente próprio (db.connect()) por transação.
+ */
+export async function openTx(client: Client, who: { role: "anon" } | { role: "authenticated"; userId: string }) {
+  await client.query("begin");
+  await client.query(`set local role ${who.role}`);
+  const claims = who.role === "authenticated" ? { sub: who.userId, role: "authenticated" } : { role: "anon" };
+  await client.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify(claims)]);
+  return {
+    query: <T = Record<string, unknown>>(sql: string, params: unknown[] = []) => client.query(sql, params).then((r) => r.rows as T[]),
+    commit: () => client.query("commit"),
+    rollback: () => client.query("rollback"),
+  };
+}
+
+/** PID da conexão (para saber se ela está esperando uma trava). */
+export async function backendPid(client: Client): Promise<number> {
+  const { rows } = await client.query("select pg_backend_pid() as pid");
+  return rows[0].pid as number;
+}
+
+/**
+ * Espera até a operação terminar ou até a conexão `pid` ficar parada numa trava.
+ * Devolve "bloqueada" ou "terminou". Sem `sleep` fixo: o teste é determinístico.
+ */
+export async function blockedOrSettled(su: Client, pid: number, op: Promise<unknown>, timeoutMs = 5000): Promise<"bloqueada" | "terminou"> {
+  let settled = false;
+  void op.then(() => (settled = true), () => (settled = true));
+  const until = Date.now() + timeoutMs;
+  while (Date.now() < until) {
+    if (settled) return "terminou";
+    const { rows } = await su.query("select wait_event_type from pg_stat_activity where pid = $1", [pid]);
+    if (rows[0]?.wait_event_type === "Lock") return "bloqueada";
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  throw new Error("Tempo esgotado esperando a operação ou a trava.");
+}
