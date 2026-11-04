@@ -1,0 +1,8 @@
+# Netlify: o runtime oficial de Next.js é instalado automaticamente (não precisa de plugin aqui).
+# Variáveis (NEXT_PUBLIC_SUPABASE_URL, chave pública, SITE_PLAN) ficam no painel da Netlify,
+# nunca neste arquivo. Ver docs/HOSPEDAGEM.md.
+[build]
+  command = "npm run build"
+
+[build.environment]
+  NODE_VERSION = "22"

@@ -17,9 +17,18 @@ describe("getSiteUrl", () => {
     expect(getSiteUrl(siteConfig)).toBe("https://barber-studio-template.vercel.app");
   });
 
-  it("fora da Vercel e sem a variável, usa a URL do config", () => {
+  it("na Netlify, sem a variável, usa o endereço principal do site", () => {
     vi.stubEnv("NEXT_PUBLIC_SITE_URL", "");
     vi.stubEnv("VERCEL_PROJECT_PRODUCTION_URL", "");
+    vi.stubEnv("NETLIFY", "true");
+    vi.stubEnv("URL", "https://barbearia-exemplo.netlify.app");
+    expect(getSiteUrl(siteConfig)).toBe("https://barbearia-exemplo.netlify.app");
+  });
+
+  it("fora da Vercel e da Netlify e sem a variável, usa a URL do config", () => {
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "");
+    vi.stubEnv("VERCEL_PROJECT_PRODUCTION_URL", "");
+    vi.stubEnv("NETLIFY", "");
     expect(getSiteUrl(siteConfig)).toBe(siteConfig.url);
   });
 });

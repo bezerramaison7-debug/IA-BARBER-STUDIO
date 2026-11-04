@@ -84,6 +84,12 @@ describe("indexação", () => {
     expect(isIndexable(false, {})).toBe(true);
     expect(isIndexable(false, { VERCEL_ENV: "production", SITE_NOINDEX: "1" })).toBe(false);
   });
+
+  it("na Netlify, deploy preview e branch deploy ficam fora do Google", () => {
+    expect(isIndexable(false, { NETLIFY: "true", CONTEXT: "production" })).toBe(true);
+    expect(isIndexable(false, { NETLIFY: "true", CONTEXT: "deploy-preview" })).toBe(false);
+    expect(isIndexable(false, { NETLIFY: "true", CONTEXT: "branch-deploy" })).toBe(false);
+  });
 });
 
 describe("textos", () => {
