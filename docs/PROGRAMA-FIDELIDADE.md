@@ -38,6 +38,31 @@ Supabase. Mudanças de regra devem ser anunciadas aos clientes antes. Pontos já
   superusuário altera ou apaga um lançamento: correções são novos lançamentos.
 - Conclusões simultâneas no 10º ponto geram **uma única** recompensa (trava por cliente e cartão).
 
+### Desfazer o atendimento que completou o cartão (decisão comercial pendente)
+
+Cenário: o 10º atendimento é concluído, a cortesia é gerada e depois o administrador desfaz essa
+conclusão (por exemplo, lançou no cliente errado).
+
+**Comportamento atual** (coberto por teste em `fidelidade.test.ts`):
+
+- o ponto é estornado e o cartão fica com saldo **−1**;
+- a cortesia **continua valendo** (disponível, reservada ou já resgatada);
+- o próximo atendimento só zera a dívida: a próxima cortesia exige **11** atendimentos, e a tela
+  mostra "Faltam 11";
+- concluir de novo o mesmo atendimento repõe o ponto, sem gerar uma segunda cortesia.
+
+O saldo nunca fica a favor do cliente, mas a cortesia gerada por engano não é retirada. Alternativas
+para a barbearia decidir:
+
+| Opção | Efeito | Observação |
+| --- | --- | --- |
+| A. Manter (atual) | Cortesia válida e saldo −1 compensado nos próximos atendimentos | Nenhuma mudança. O cliente não perde o benefício que já viu |
+| B. Retirar se ainda estiver disponível | Ao desfazer, a cortesia disponível é cancelada e os 10 pontos voltam (saldo 9) | Se já estiver reservada ou resgatada, cai na opção A. Exige mudança no gatilho e teste |
+| C. Ajuste manual caso a caso | Mantém A e o administrador usa **Cancelar cortesia** quando achar justo | Já é possível hoje, com motivo registrado |
+
+**Decisão necessária:** qual opção vale para a D' Mellos. Até lá, a opção A segue ativa e a C fica
+disponível.
+
 ## Recompensas
 
 ```

@@ -57,8 +57,8 @@ export interface LoyaltyCard {
 
 /** "Faltam 3 atendimentos para o seu próximo Corte clássico gratuito." */
 export function loyaltyCardText(card: Pick<LoyaltyCard, "threshold" | "points" | "reward_service_name">): string {
-  const points = Math.max(0, Math.min(card.points, card.threshold));
-  const missing = card.threshold - points;
+  // Saldo negativo (conclusão desfeita depois de gerar a recompensa) aumenta o que falta.
+  const missing = card.threshold - Math.min(card.points, card.threshold);
   if (missing <= 0) return `Você completou o cartão: ${card.reward_service_name} gratuito disponível.`;
   return `Falta${missing === 1 ? "" : "m"} ${missing} atendimento${missing === 1 ? "" : "s"} para o seu próximo ${card.reward_service_name} gratuito.`;
 }

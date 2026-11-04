@@ -224,6 +224,25 @@ describe("recompensas", () => {
   });
 });
 
+describe("desfazer o 10º atendimento depois da recompensa (política atual; decisão comercial pendente)", () => {
+  it("a recompensa continua válida e o cartão fica devendo 1 ponto, sem gerar nova recompensa", async () => {
+    const c = await createUser(db.su);
+    for (let i = 0; i < 9; i++) await visit(c, "corte-classico");
+    const tenth = await visit(c, "corte-classico");
+    expect((await loyalty(c))["Cartão Corte"]).toEqual({ points: 0, rewards: 1 });
+
+    await asAdmin("public.admin_update_status($1, 'confirmado', 'Lançado no cliente errado')", [tenth]);
+    expect((await loyalty(c))["Cartão Corte"]).toEqual({ points: -1, rewards: 1 });
+    const { rows } = await db.su.query(
+      "select status from public.loyalty_rewards where customer_id = $1", [c]);
+    expect(rows.map((r) => r.status)).toEqual(["disponivel"]);
+
+    // concluir de novo só repõe o ponto estornado: nada de segunda recompensa
+    await asAdmin("public.admin_update_status($1, 'concluido')", [tenth]);
+    expect((await loyalty(c))["Cartão Corte"]).toEqual({ points: 0, rewards: 1 });
+  });
+});
+
 describe("exclusão definitiva (LGPD)", () => {
   it("apagar o usuário no Auth remove a conta e o histórico pessoal; agenda e auditoria ficam sem identificação", async () => {
     const c = await createUser(db.su);

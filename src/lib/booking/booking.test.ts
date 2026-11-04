@@ -71,6 +71,10 @@ describe("regras de apresentação", () => {
     expect(loyaltyCardText({ threshold: 10, points: 9, reward_service_name: "Corte + barba" })).toBe(
       "Falta 1 atendimento para o seu próximo Corte + barba gratuito.",
     );
+    // conclusão desfeita depois da recompensa: saldo -1, faltam 11 (não 10)
+    expect(loyaltyCardText({ threshold: 10, points: -1, reward_service_name: "Corte clássico" })).toBe(
+      "Faltam 11 atendimentos para o seu próximo Corte clássico gratuito.",
+    );
   });
 
   it("transições e correções", () => {
