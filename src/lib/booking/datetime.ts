@@ -22,7 +22,7 @@ export function formatDate(instant: Date | string): string {
   return dateFmt.format(new Date(instant));
 }
 
-/** "sexta-feira, 23 de outubro" */
+/** "Sexta-feira, 23 de outubro" */
 export function formatLongDate(instant: Date | string): string {
   const text = longFmt.format(new Date(instant));
   // Em português só a primeira letra vai em maiúscula ("Sexta-feira, 6 de novembro").
@@ -31,7 +31,7 @@ export function formatLongDate(instant: Date | string): string {
 
 /** Rótulo curto de um dia "AAAA-MM-DD": "sex., 23/10". */
 export function formatDayKey(key: string): string {
-  return shortDayFmt.format(new Date(`${key}T12:00:00Z`)).replace(/\.,/, ".,");
+  return shortDayFmt.format(new Date(`${key}T12:00:00Z`));
 }
 
 /** Soma dias a "AAAA-MM-DD" sem passar por fuso. */
