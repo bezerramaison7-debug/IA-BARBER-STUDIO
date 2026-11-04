@@ -110,6 +110,8 @@ export const defaultTexts = {
     addressTitle: "Endereço",
     serviceAreaPrefix: "Atendemos",
     privacy: "Privacidade",
+    cookies: "Cookies",
+    terms: "Termos de uso",
   },
   servicePage: {
     breadcrumbHome: "Início",

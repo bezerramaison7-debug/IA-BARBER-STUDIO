@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addDays, dayKey, formatDate, formatTime, localToIso } from "./datetime";
+import { addDays, dayKey, formatDate, formatLongDate, formatTime, localToIso } from "./datetime";
 import { ADMIN_TRANSITIONS, isUpcoming, loyaltyCardText, needsReason, validateSignup } from "./domain";
 import { getSupabaseEnv, looksLikeSecretKey } from "./env";
 import { errorCode, friendlyError } from "./errors";
@@ -55,6 +55,10 @@ describe("datas no fuso da barbearia", () => {
     expect(dayKey("2026-11-11T02:30:00Z")).toBe("2026-11-10"); // 23:30 do dia 10 em SP
     expect(localToIso("2026-11-10", "14:30")).toBe(data.startsAt);
     expect(addDays("2026-12-31", 1)).toBe("2027-01-01");
+  });
+
+  it("data por extenso com só a primeira letra maiúscula", () => {
+    expect(formatLongDate("2026-11-06T15:00:00Z")).toBe("Sexta-feira, 6 de novembro");
   });
 });
 

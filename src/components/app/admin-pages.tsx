@@ -56,7 +56,7 @@ export function AdminToday() {
 
   return (
     <div className="grid gap-10">
-      <PageTitle intro={<span className="capitalize">{formatLongDate(localToIso(day, "12:00"))}</span>}>{t.title}</PageTitle>
+      <PageTitle intro={<span>{formatLongDate(localToIso(day, "12:00"))}</span>}>{t.title}</PageTitle>
       {stats.error && <Notice tone="error">{stats.error}</Notice>}
       <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {Object.entries(t.stats).map(([key, label]) => (
@@ -111,7 +111,7 @@ export function AdminAgenda() {
       {list.error && <Notice tone="error">{list.error}</Notice>}
       {byDay.map(([d, items]) => (
         <section key={d} aria-label={formatDayKey(d)} className="grid gap-3">
-          <h2 className="text-xl font-semibold capitalize">{formatLongDate(localToIso(d, "12:00"))}</h2>
+          <h2 className="text-xl font-semibold">{formatLongDate(localToIso(d, "12:00"))}</h2>
           {items.length === 0 ? <p className="text-muted">{t.empty}</p> : items.map((a) => <AppointmentItem key={a.id} a={a} onChanged={list.reload} />)}
         </section>
       ))}

@@ -24,7 +24,9 @@ export function formatDate(instant: Date | string): string {
 
 /** "sexta-feira, 23 de outubro" */
 export function formatLongDate(instant: Date | string): string {
-  return longFmt.format(new Date(instant));
+  const text = longFmt.format(new Date(instant));
+  // Em português só a primeira letra vai em maiúscula ("Sexta-feira, 6 de novembro").
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 /** Rótulo curto de um dia "AAAA-MM-DD": "sex., 23/10". */

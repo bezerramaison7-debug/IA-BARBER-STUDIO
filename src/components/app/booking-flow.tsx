@@ -289,7 +289,7 @@ export function BookingFlow() {
             {day && <ActionButton variant="ghost" onClick={() => setParams({ data: null, hora: null })}>{t.change}</ActionButton>}
           </div>
           {day ? (
-            <p className="mt-2 text-lg capitalize">{formatLongDate(`${day}T12:00:00-03:00`)}</p>
+            <p className="mt-2 text-lg">{formatLongDate(`${day}T12:00:00-03:00`)}</p>
           ) : days === null ? (
             <p className="mt-4 text-muted">{appTexts.common.loading}</p>
           ) : days.length === 0 ? (
@@ -299,7 +299,7 @@ export function BookingFlow() {
               {days.map((d) => (
                 <li key={d.day}>
                   <Choice selected={false} onClick={() => setParams({ data: d.day, hora: null })} label={formatLongDate(`${d.day}T12:00:00-03:00`)}>
-                    <span className="font-semibold capitalize">{formatDayKey(d.day)}</span>
+                    <span className="font-semibold">{formatDayKey(d.day)}</span>
                   </Choice>
                 </li>
               ))}
@@ -342,7 +342,7 @@ export function BookingFlow() {
           <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-6 gap-y-2">
             <dt className="text-muted">{t.service}</dt><dd>{service.name}</dd>
             <dt className="text-muted">{t.barber}</dt><dd>{barber?.name ?? t.anyBarber}</dd>
-            <dt className="text-muted">{t.date}</dt><dd className="capitalize">{formatLongDate(time)}</dd>
+            <dt className="text-muted">{t.date}</dt><dd>{formatLongDate(time)}</dd>
             <dt className="text-muted">{t.time}</dt><dd>{formatTime(time)}</dd>
             <dt className="text-muted">{t.duration}</dt><dd>{formatDuration(service.duration_minutes)}</dd>
             {service.price_cents !== null && (

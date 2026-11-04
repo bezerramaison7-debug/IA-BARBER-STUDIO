@@ -60,7 +60,7 @@ export function LoginForm() {
         </Link>
         <p>
           {t.noAccount}{" "}
-          <Link href={`/cadastro?next=${encodeURIComponent(next)}`} className="font-semibold text-accent underline underline-offset-4">
+          <Link href={`/cadastro?next=${encodeURIComponent(next)}`} className="inline-flex min-h-11 items-center font-semibold text-accent underline underline-offset-4">
             {t.createAccount}
           </Link>
         </p>
@@ -162,7 +162,7 @@ export function SignupForm() {
       </form>
       <p className="mt-8 text-sm">
         {t.haveAccount}{" "}
-        <Link href={`/entrar?next=${encodeURIComponent(next)}`} className="font-semibold text-accent underline underline-offset-4">
+        <Link href={`/entrar?next=${encodeURIComponent(next)}`} className="inline-flex min-h-11 items-center font-semibold text-accent underline underline-offset-4">
           {t.signInButton}
         </Link>
       </p>

@@ -99,7 +99,7 @@ export function AccountPage() {
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <p className="text-lg font-semibold">{a.service_name}{a.is_reward && ` · ${appTexts.booking.rewardFree}`}</p>
-                      <p className="capitalize">{formatLongDate(a.starts_at)} · {formatTime(a.starts_at)}</p>
+                      <p>{formatLongDate(a.starts_at)} · {formatTime(a.starts_at)}</p>
                       <p className="text-sm text-muted">{a.barber?.name} · {appTexts.booking.protocol} {a.protocol}</p>
                     </div>
                     <StatusBadge status={a.status} />

@@ -181,6 +181,8 @@ export interface SiteConfig {
     privacyUpdatedAt: string;
     /** Empresa de hospedagem citada na política. Padrão: "Vercel". */
     hostingProvider?: string;
+    /** Serviço de envio de e-mail (SMTP) do sistema de contas, citado como operador. Ex.: "Brevo". */
+    emailProvider?: string;
     /** Parágrafos extras específicos do cliente, revisados por ele. */
     extraPrivacyNotes?: string[];
   };
