@@ -207,7 +207,7 @@ export function BookingFlow() {
         {t.title}
       </PageTitle>
 
-      <ol className="mb-8 flex flex-wrap gap-2 text-sm" aria-label="Etapas">
+      <ol className="mb-8 flex flex-wrap gap-2 text-sm" aria-label={t.stepsLabel}>
         {t.steps.map((label, i) => (
           <li
             key={label}

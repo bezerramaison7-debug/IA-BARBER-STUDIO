@@ -29,7 +29,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   return (
     <RequireAuth admin>
-      <nav aria-label="Painel" className="-mx-5 mb-8 overflow-x-auto border-b border-line px-5">
+      <nav aria-label={t.navLabel} className="-mx-5 mb-8 overflow-x-auto border-b border-line px-5">
         <ul className="flex min-w-max gap-1">
           {NAV.map((item) => {
             const active = item.href === "/admin" ? pathname === "/admin" : pathname.startsWith(item.href);
@@ -93,7 +93,7 @@ export function AppointmentItem({ a, onChanged, showDate = false }: { a: Appoint
     if (!value) return;
     const m = /^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})$/.exec(value.trim());
     if (!m) {
-      setError("Use o formato AAAA-MM-DD HH:MM.");
+      setError(t.dateFormat);
       return;
     }
     setBusy(true);

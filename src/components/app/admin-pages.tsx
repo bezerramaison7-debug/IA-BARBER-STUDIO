@@ -383,7 +383,7 @@ function Exceptions({ barbers }: { barbers: Barber[] }) {
             </SelectInput>
           )}
         </Field>
-        <Field label="Tipo">
+        <Field label={t.kind}>
           {(p) => (
             <SelectInput {...p} name="kind" defaultValue="bloqueio">
               {Object.entries(t.exceptionKinds).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
@@ -394,7 +394,7 @@ function Exceptions({ barbers }: { barbers: Barber[] }) {
         <Field label={`${t.end} (${appTexts.booking.date})`}>{(p) => <TextInput {...p} name="endDay" type="date" />}</Field>
         <label className="flex min-h-11 cursor-pointer items-center gap-3 sm:col-span-2">
           <input type="checkbox" name="allDay" defaultChecked className="size-5 accent-[var(--brand-accent)]" />
-          Dia inteiro
+          {t.allDay}
         </label>
         <Field label={`${t.start} (${appTexts.booking.time})`}>{(p) => <TextInput {...p} name="startTime" type="time" defaultValue="09:00" />}</Field>
         <Field label={`${t.end} (${appTexts.booking.time})`}>{(p) => <TextInput {...p} name="endTime" type="time" defaultValue="18:00" />}</Field>
@@ -513,7 +513,7 @@ function CustomerSheetView({ id, onBack }: { id: string; onBack: () => void }) {
             <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
               <span>{s.fidelidade.find((c) => c.rule_id === r.rule_id)?.reward_service_name ?? "Cortesia"} · {r.status} · {formatDate(r.created_at)}</span>
               {r.status === "disponivel" && (
-                <ActionButton variant="danger" onClick={() => { const why = window.prompt(t.reasonPrompt); if (why) void act(() => admin.cancelReward(r.id, why), "Cortesia cancelada."); }}>
+                <ActionButton variant="danger" onClick={() => { const why = window.prompt(t.reasonPrompt); if (why) void act(() => admin.cancelReward(r.id, why), t.rewardCancelled); }}>
                   {t.cancelReward}
                 </ActionButton>
               )}
@@ -549,7 +549,7 @@ function CustomerSheetView({ id, onBack }: { id: string; onBack: () => void }) {
           </ActionButton>
         )}
         {s.perfil.id !== me?.id && (
-          <ActionButton variant="danger" onClick={() => { if (window.confirm(t.anonymizeConfirm)) { const why = window.prompt(t.reasonPrompt); if (why) void act(() => admin.anonymize(id, why), "Dados removidos."); } }}>
+          <ActionButton variant="danger" onClick={() => { if (window.confirm(t.anonymizeConfirm)) { const why = window.prompt(t.reasonPrompt); if (why) void act(() => admin.anonymize(id, why), t.anonymized); } }}>
             {t.anonymize}
           </ActionButton>
         )}
@@ -581,7 +581,7 @@ export function AdminSettings() {
     const d = new FormData(e.currentTarget);
     const whatsapp = String(d.get("whatsapp") ?? "").replace(/\D/g, "");
     if (whatsapp && !isValidBrazilianWhatsApp(whatsapp)) {
-      setMsg({ tone: "error", text: "WhatsApp inválido. Use 55 + DDD + número, só dígitos (ex.: 5516991234567)." });
+      setMsg({ tone: "error", text: t.whatsappInvalid });
       return;
     }
     const num = (k: string) => Number(d.get(k));
@@ -649,7 +649,7 @@ export function AdminSettings() {
                 className="grid gap-3"
               >
                 <div className="flex flex-wrap items-end gap-3">
-                  <Field label="Nome">{(p) => <TextInput {...p} name="name" defaultValue={b.name} />}</Field>
+                  <Field label={t.name}>{(p) => <TextInput {...p} name="name" defaultValue={b.name} />}</Field>
                   <label className="flex min-h-11 items-center gap-2"><input type="checkbox" name="active" defaultChecked={b.active} className="size-5 accent-[var(--brand-accent)]" />{t.active}</label>
                 </div>
                 <fieldset>
@@ -699,7 +699,7 @@ export function AdminSettings() {
                 }}
                 className="flex flex-wrap items-end gap-3"
               >
-                <Field label="Nome">{(p) => <TextInput {...p} name="name" defaultValue={s.name} />}</Field>
+                <Field label={t.name}>{(p) => <TextInput {...p} name="name" defaultValue={s.name} />}</Field>
                 <Field label={t.durationMin}>{(p) => <TextInput {...p} name="duration" type="number" min={5} max={480} defaultValue={s.duration_minutes} className="w-28" />}</Field>
                 <label className="flex min-h-11 items-center gap-2"><input type="checkbox" name="active" defaultChecked={s.active} className="size-5 accent-[var(--brand-accent)]" />{t.active}</label>
                 <ActionButton type="submit" variant="outline">{appTexts.common.save}</ActionButton>
@@ -720,7 +720,7 @@ export function AdminSettings() {
                   const d = new FormData(e.currentTarget);
                   const eligible = d.getAll("eligible").map(String);
                   if (!eligible.length) {
-                    setMsg({ tone: "error", text: "Escolha ao menos um serviço que conta pontos." });
+                    setMsg({ tone: "error", text: t.ruleEligibleRequired });
                     return;
                   }
                   void act(() => admin.saveRule({ id: r.id, name: String(d.get("name")), threshold: Number(d.get("threshold")), active: d.get("active") === "on", eligible_service_ids: eligible, reward_service_id: String(d.get("reward")) }), rules.reload);
@@ -728,9 +728,9 @@ export function AdminSettings() {
                 className="grid gap-3"
               >
                 <div className="flex flex-wrap items-end gap-3">
-                  <Field label="Nome do cartão">{(p) => <TextInput {...p} name="name" defaultValue={r.name} />}</Field>
+                  <Field label={t.ruleName}>{(p) => <TextInput {...p} name="name" defaultValue={r.name} />}</Field>
                   <Field label={t.threshold}>{(p) => <TextInput {...p} name="threshold" type="number" min={1} max={100} defaultValue={r.threshold} className="w-28" />}</Field>
-                  <Field label="Cortesia">
+                  <Field label={t.ruleReward}>
                     {(p) => (
                       <SelectInput {...p} name="reward" defaultValue={r.reward_service_id}>
                         {(services.data ?? []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -740,7 +740,7 @@ export function AdminSettings() {
                   <label className="flex min-h-11 items-center gap-2"><input type="checkbox" name="active" defaultChecked={r.active} className="size-5 accent-[var(--brand-accent)]" />{t.active}</label>
                 </div>
                 <fieldset>
-                  <legend className="text-sm text-muted">Serviços que contam pontos</legend>
+                  <legend className="text-sm text-muted">{t.ruleEligible}</legend>
                   <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
                     {(services.data ?? []).map((s) => (
                       <label key={s.id} className="flex min-h-11 items-center gap-2 text-sm">
@@ -791,14 +791,14 @@ export function AdminPrivacy() {
               <p className="text-sm text-muted">{r.customer?.full_name} · {r.customer?.email} · {formatDate(r.created_at)}</p>
               {r.details && <p className="mt-2">{r.details}</p>}
               <form onSubmit={(e) => resolve(e, r)} className="mt-3 grid gap-3 sm:grid-cols-[12rem_1fr_auto] sm:items-end">
-                <Field label="Status">
+                <Field label={t.status}>
                   {(p) => (
                     <SelectInput {...p} name="status" defaultValue={r.status === "aberta" ? "em_andamento" : r.status}>
                       {["em_andamento", "concluida", "recusada"].map((s) => <option key={s} value={s}>{t.statuses[s]}</option>)}
                     </SelectInput>
                   )}
                 </Field>
-                <Field label="Resposta">{(p) => <TextArea {...p} name="resolution" rows={1} defaultValue={r.resolution ?? ""} />}</Field>
+                <Field label={t.resolution}>{(p) => <TextArea {...p} name="resolution" rows={1} defaultValue={r.resolution ?? ""} />}</Field>
                 <ActionButton type="submit" variant="outline">{t.resolve}</ActionButton>
               </form>
             </Card>
