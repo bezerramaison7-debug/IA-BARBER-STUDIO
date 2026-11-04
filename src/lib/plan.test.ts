@@ -20,8 +20,12 @@ describe("planos", () => {
       bookingForm: false,
       servicePages: false,
       customColors: false,
+      onlineBooking: false,
+      loyalty: false,
     });
-    expect(Object.values(getFeatures(premium)).every(Boolean)).toBe(true);
+    // Premium não muda com a V3: agenda e fidelidade ficam no plano profissional.
+    expect(getFeatures(premium)).toMatchObject({ team: true, faq: true, bookingForm: true, onlineBooking: false, loyalty: false });
+    expect(Object.values(getFeatures({ plan: "profissional" })).every(Boolean)).toBe(true);
   });
 
   it("SITE_PLAN no build sobrescreve o config", () => {

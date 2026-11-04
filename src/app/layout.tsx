@@ -6,7 +6,9 @@ import { SiteFooter } from "@/components/layout/site-footer";
 import { SiteHeader } from "@/components/layout/site-header";
 import { WhatsAppFab } from "@/components/layout/whatsapp-fab";
 import { isIndexable } from "@/lib/indexing";
-import { BOOKING_HREF, getNavLinks } from "@/lib/navigation";
+import { getBookingHref, getNavLinks } from "@/lib/navigation";
+import { isBookingSystemEnabled } from "@/lib/plan";
+import { appTexts } from "@/config/texts-app";
 import { getSiteUrl, getWhatsAppUrl } from "@/lib/site";
 import { getTexts } from "@/lib/texts";
 import { resolveThemeColors, themeToCssVars } from "@/lib/theme";
@@ -37,6 +39,7 @@ const siteUrl = getSiteUrl(siteConfig);
 const texts = getTexts(siteConfig);
 const colors = resolveThemeColors(siteConfig);
 const indexable = isIndexable(siteConfig.demo);
+const onlineBooking = isBookingSystemEnabled(siteConfig);
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -82,7 +85,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           name={siteConfig.business.name}
           demo={siteConfig.demo}
           links={getNavLinks(siteConfig, texts)}
-          bookingHref={BOOKING_HREF}
+          bookingHref={getBookingHref(onlineBooking)}
+          account={onlineBooking ? { href: "/minha-conta", label: appTexts.nav.account } : undefined}
           labels={{ booking: texts.nav.booking, menuOpen: texts.nav.menuOpen, menuClose: texts.nav.menuClose }}
         />
         <main id="conteudo" className="flex-1">

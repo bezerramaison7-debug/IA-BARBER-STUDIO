@@ -12,9 +12,11 @@ export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
  * - essencial: landing, serviços e preços, galeria, localização, WhatsApp e SEO básico.
  * - premium: tudo do essencial + equipe, dúvidas frequentes, formulário de solicitação de
  *   horário, páginas individuais por serviço e personalização ampliada de cores.
+ * - profissional (V3): tudo do premium + agendamento com conta, painel de agenda e fidelidade.
+ *   Só funciona com um projeto Supabase configurado (variáveis NEXT_PUBLIC_SUPABASE_*).
  * Detalhes em docs/PLANOS.md.
  */
-export type Plan = "essencial" | "premium";
+export type Plan = "essencial" | "premium" | "profissional";
 
 /** Paletas prontas (ver src/lib/theme.ts). */
 export type ThemePreset = "classico" | "grafite" | "carvalho";

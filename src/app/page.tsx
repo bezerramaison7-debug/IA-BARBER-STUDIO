@@ -9,7 +9,7 @@ import { Hero } from "@/components/sections/hero";
 import { Pricing } from "@/components/sections/pricing";
 import { Services } from "@/components/sections/services";
 import { Team } from "@/components/sections/team";
-import { getFeatures, getServicesWithPage } from "@/lib/plan";
+import { getFeatures, getServicesWithPage, isBookingSystemEnabled } from "@/lib/plan";
 import { buildFaqJsonLd, buildLocalBusinessJsonLd } from "@/lib/site";
 import { getTexts } from "@/lib/texts";
 
@@ -30,7 +30,7 @@ export default function HomePage() {
       <Pricing config={siteConfig} texts={texts} />
       {showTeam && <Team config={siteConfig} texts={texts} />}
       <GallerySection config={siteConfig} texts={texts} />
-      <Booking config={siteConfig} texts={texts} withForm={features.bookingForm} />
+      <Booking config={siteConfig} texts={texts} withForm={features.bookingForm} onlineBooking={isBookingSystemEnabled(siteConfig)} />
       {showFaq && <Faq config={siteConfig} texts={texts} />}
       <Contact config={siteConfig} texts={texts} />
     </>

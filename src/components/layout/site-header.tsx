@@ -12,9 +12,11 @@ interface SiteHeaderProps {
   links: NavLink[];
   bookingHref: string;
   labels: { booking: string; menuOpen: string; menuClose: string };
+  /** V3: link para a área do cliente (só com o agendamento online ativo). */
+  account?: { href: string; label: string };
 }
 
-export function SiteHeader({ name, demo, links, bookingHref, labels }: SiteHeaderProps) {
+export function SiteHeader({ name, demo, links, bookingHref, labels, account }: SiteHeaderProps) {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -73,6 +75,11 @@ export function SiteHeader({ name, demo, links, bookingHref, labels }: SiteHeade
         </nav>
 
         <div className="flex items-center gap-3">
+          {account && (
+            <Link href={account.href} className="inline-flex min-h-11 items-center px-2 font-semibold text-foreground/80 hover:text-accent max-sm:hidden">
+              {account.label}
+            </Link>
+          )}
           <Link href={bookingHref} className={buttonClasses("primary", "min-h-11 px-5 max-sm:hidden")}>
             {labels.booking}
           </Link>
@@ -108,6 +115,11 @@ export function SiteHeader({ name, demo, links, bookingHref, labels }: SiteHeade
             </li>
           ))}
         </ul>
+        {account && (
+          <Link href={account.href} onClick={() => setMenuOpen(false)} className="block py-5 font-display text-4xl font-bold uppercase">
+            {account.label}
+          </Link>
+        )}
         <Link
           href={bookingHref}
           onClick={() => setMenuOpen(false)}

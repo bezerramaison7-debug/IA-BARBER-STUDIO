@@ -109,6 +109,7 @@ as $$
 declare
   v_name text := btrim(coalesce(new.raw_user_meta_data ->> 'full_name', ''));
   v_phone text := regexp_replace(coalesce(new.raw_user_meta_data ->> 'phone', ''), '[^0-9]', '', 'g');
+  v_marketing boolean;
 begin
   if char_length(v_name) < 3 or char_length(v_name) > 120 then
     raise exception using message = 'Informe o nome completo.', hint = 'cadastro_nome', errcode = 'P0001';
@@ -116,8 +117,10 @@ begin
   if v_phone !~ '^[0-9]{10,13}$' then
     raise exception using message = 'Informe um telefone com DDD.', hint = 'cadastro_telefone', errcode = 'P0001';
   end if;
-  insert into public.profiles (id, full_name, phone, email)
-  values (new.id, v_name, v_phone, new.email);
+  -- Consentimento de marketing: opcional, desmarcado por padrão, separado do cadastro.
+  v_marketing := coalesce((new.raw_user_meta_data ->> 'marketing_opt_in')::boolean, false);
+  insert into public.profiles (id, full_name, phone, email, marketing_opt_in, marketing_opt_in_at)
+  values (new.id, v_name, v_phone, new.email, v_marketing, case when v_marketing then now() end);
   return new;
 end $$;
 

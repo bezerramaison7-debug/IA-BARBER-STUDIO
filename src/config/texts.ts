@@ -73,6 +73,16 @@ export const defaultTexts = {
     sent: "Mensagem pronta. Se o WhatsApp não abriu,",
     sentLink: "abra o WhatsApp por aqui",
   },
+  onlineBooking: {
+    title: "Agende online",
+    text: "Veja os horários livres de verdade e escolha o seu. A barbearia confirma pelo WhatsApp.",
+    steps: [
+      "Escolha o serviço, o profissional e o horário.",
+      "Entre ou crie sua conta com nome, telefone, e-mail e senha.",
+      "Envie a mensagem pronta no WhatsApp e aguarde a confirmação.",
+    ],
+    button: "Ver horários disponíveis",
+  },
   whatsappCta: {
     title: "Agende pelo WhatsApp",
     text: "Mande uma mensagem com o serviço e o melhor horário. A barbearia responde para confirmar.",

@@ -1,7 +1,9 @@
 import Image from "next/image";
 import type { SiteTexts } from "@/config/texts";
 import type { SiteConfig } from "@/config/types";
-import { LinkButton } from "@/components/ui/button";
+import Link from "next/link";
+import { buttonClasses, LinkButton } from "@/components/ui/button";
+import { ONLINE_BOOKING_HREF } from "@/lib/navigation";
 import { WhatsAppIcon } from "@/components/ui/icons";
 import { Container } from "@/components/ui/section";
 import { getWhatsAppNumber, getWhatsAppUrl } from "@/lib/site";
@@ -12,9 +14,12 @@ interface BookingProps {
   texts: SiteTexts;
   /** Premium: formulário de solicitação. Essencial: bloco com botão de WhatsApp. */
   withForm: boolean;
+  /** V3: agendamento online com conta; a seção leva ao fluxo /agendar. */
+  onlineBooking?: boolean;
 }
 
-export function Booking({ config, texts, withForm }: BookingProps) {
+export function Booking({ config, texts, withForm, onlineBooking = false }: BookingProps) {
+  if (onlineBooking) return <OnlineBookingCta config={config} texts={texts} />;
   const t = withForm ? texts.booking : texts.whatsappCta;
 
   return (
@@ -86,6 +91,39 @@ export function Booking({ config, texts, withForm }: BookingProps) {
             />
           </div>
         )}
+      </Container>
+    </section>
+  );
+}
+
+/** V3: convite ao agendamento online (horários reais, conta e confirmação pela barbearia). */
+function OnlineBookingCta({ config, texts }: { config: SiteConfig; texts: SiteTexts }) {
+  const t = texts.onlineBooking;
+  return (
+    <section id="agendar" aria-labelledby="agendar-titulo" className="bg-surface py-20 sm:py-28">
+      <Container className="grid items-center gap-12 lg:grid-cols-2">
+        <div>
+          <h2 id="agendar-titulo" className="font-display text-5xl leading-[0.95] font-extrabold tracking-tight uppercase sm:text-6xl">
+            {t.title}
+          </h2>
+          <p className="mt-5 max-w-md text-lg text-muted">{t.text}</p>
+          <ol className="mt-8 space-y-4">
+            {t.steps.map((step, i) => (
+              <li key={step} className="flex gap-4">
+                <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-full border border-accent font-display text-lg font-bold text-accent">
+                  {i + 1}
+                </span>
+                <p className="pt-1">{step}</p>
+              </li>
+            ))}
+          </ol>
+          <Link href={ONLINE_BOOKING_HREF} className={buttonClasses("primary", "mt-8")}>
+            {t.button}
+          </Link>
+        </div>
+        <div className="relative aspect-3/2 overflow-hidden rounded-sm">
+          <Image src={config.images.booking.src} alt={config.images.booking.alt} fill sizes="(min-width: 1024px) 50vw, 100vw" className="object-cover" />
+        </div>
       </Container>
     </section>
   );
