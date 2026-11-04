@@ -150,14 +150,17 @@ describe("concorrência", () => {
   it("10 tentativas simultâneas com durações diferentes: nenhuma sobreposição", async () => {
     const d = await localDay(db.su, 6);
     const clients = await Promise.all(Array.from({ length: 10 }, () => db.connect()));
-    const users = await Promise.all(clients.map(() => createUser(db.su)));
+    const users: string[] = [];
+    for (let i = 0; i < clients.length; i++) users.push(await createUser(db.su));
     const services = ["corte-classico", "degrade", "barba", "corte-barba"];
     const times = ["09:00", "09:15", "09:30", "09:45", "10:00"];
+    const starts: string[] = [];
+    for (const t of times) starts.push(await at(db.su, d, t));
     await Promise.allSettled(
-      clients.map(async (c, i) =>
+      clients.map((c, i) =>
         as(c, { role: "authenticated", userId: users[i]! }, "select public.request_appointment($1, $2, $3, $4)", [
           services[i % services.length],
-          await at(db.su, d, times[i % times.length]!),
+          starts[i % starts.length],
           uuid(),
           cat.barberB,
         ]),
@@ -186,6 +189,10 @@ describe("administração da agenda", () => {
     await adminCall("public.admin_update_status($1, 'confirmado')", [r.id]);
     const { rows } = await db.su.query("select status from public.appointments where id = $1", [r.id]);
     expect(rows[0].status).toBe("confirmado");
+    // confirmado continua ocupando o horário na agenda pública
+    const start = await at(db.su, await localDay(db.su, 7), "09:00");
+    const list = await slots("barba", await localDay(db.su, 7), cat.barberA);
+    expect(list.map((x) => x.start)).not.toContain(start);
   });
 
   it("mudar expediente com agendamento existente: mostra conflito, só salva com decisão", async () => {

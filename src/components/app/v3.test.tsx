@@ -30,13 +30,13 @@ const api = vi.hoisted(() => ({
     availableSlots: vi.fn(),
   },
   me: { rewards: vi.fn(), appointments: vi.fn(), requestAppointment: vi.fn(), reschedule: vi.fn() },
-  auth: { signUp: vi.fn(), signIn: vi.fn() },
+  auth: { signUp: vi.fn(), signIn: vi.fn(), requestPasswordReset: vi.fn(), updatePassword: vi.fn(), verifyEmailLink: vi.fn() },
   admin: { updateStatus: vi.fn(), reschedule: vi.fn() },
 }));
 vi.mock("@/lib/booking/api", () => api);
 
 import { AppointmentItem } from "./admin-shared";
-import { LoginForm, SignupForm } from "./auth-forms";
+import { EmailLinkHandler, ForgotPasswordForm, LoginForm, NewPasswordForm, SignupForm } from "./auth-forms";
 import { BookingFlow } from "./booking-flow";
 
 const START = "2026-11-10T17:30:00.000Z"; // 14:30 em São Paulo
@@ -152,6 +152,42 @@ describe("cadastro e login", () => {
     await userEvent.type(screen.getByLabelText("Senha"), "errada123");
     await userEvent.click(screen.getByRole("button", { name: "Entrar" }));
     expect(await screen.findByText("E-mail ou senha incorretos.")).toBeTruthy();
+  });
+});
+
+describe("recuperação de senha", () => {
+  it("pede o link para /redefinir-senha e responde de forma neutra (não revela se o e-mail existe)", async () => {
+    api.auth.requestPasswordReset.mockResolvedValue(undefined);
+    render(<ForgotPasswordForm />);
+    await userEvent.type(screen.getByLabelText("E-mail"), "ana@example.com");
+    await userEvent.click(screen.getByRole("button", { name: "Enviar link" }));
+    expect(api.auth.requestPasswordReset).toHaveBeenCalledWith("ana@example.com", expect.stringMatching(/\/redefinir-senha$/));
+    expect(await screen.findByText(/Se houver uma conta com este e-mail/)).toBeTruthy();
+  });
+
+  it("o link do e-mail valida o token e leva para criar a nova senha", async () => {
+    search = new URLSearchParams({ token_hash: "hash-de-teste", type: "recovery" });
+    api.auth.verifyEmailLink.mockResolvedValue(undefined);
+    render(<EmailLinkHandler />);
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/redefinir-senha"));
+    expect(api.auth.verifyEmailLink).toHaveBeenCalledWith("hash-de-teste", "recovery");
+  });
+
+  it("nova senha fraca é recusada sem chamar o servidor; senha válida é salva", async () => {
+    api.auth.updatePassword.mockResolvedValue(undefined);
+    render(<NewPasswordForm />);
+    await userEvent.type(screen.getByLabelText(/Nova senha/), "curta");
+    await userEvent.type(screen.getByLabelText("Repita a senha"), "curta");
+    await userEvent.click(screen.getByRole("button", { name: "Salvar nova senha" }));
+    expect(api.auth.updatePassword).not.toHaveBeenCalled();
+
+    await userEvent.clear(screen.getByLabelText(/Nova senha/));
+    await userEvent.clear(screen.getByLabelText("Repita a senha"));
+    await userEvent.type(screen.getByLabelText(/Nova senha/), "novasenha42");
+    await userEvent.type(screen.getByLabelText("Repita a senha"), "novasenha42");
+    await userEvent.click(screen.getByRole("button", { name: "Salvar nova senha" }));
+    expect(api.auth.updatePassword).toHaveBeenCalledWith("novasenha42");
+    expect(await screen.findByText(/Senha alterada/)).toBeTruthy();
   });
 });
 
