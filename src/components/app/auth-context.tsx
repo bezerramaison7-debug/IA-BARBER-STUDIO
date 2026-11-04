@@ -87,7 +87,4 @@ export function RequireAuth({ children, admin = false }: { children: ReactNode; 
 }
 
 /** Só aceita destinos internos (evita redirecionamento aberto para outro site). */
-export function safeNext(next: string | null, fallback = "/minha-conta"): string {
-  if (!next || !next.startsWith("/") || next.startsWith("//") || next.startsWith("/\\")) return fallback;
-  return next;
-}
+export { safeNext } from "@/lib/booking/redirect";
