@@ -63,10 +63,16 @@ create trigger appointments_touch before update on public.appointments for each 
 create trigger settings_touch before update on public.business_settings for each row execute function public._touch_updated_at();
 
 -- Registros que não podem ser alterados nem apagados (nem pelo administrador).
+-- Única exceção: a exclusão em cascata quando o usuário é apagado no Auth (direito de eliminação,
+-- LGPD art. 18, VI). Ela vem do gatilho da chave estrangeira, por isso pg_trigger_depth() > 1;
+-- um DELETE/UPDATE direto (API, painel ou SQL Editor) tem profundidade 1 e continua bloqueado.
 create or replace function public._immutable() returns trigger
 language plpgsql set search_path = ''
 as $$
 begin
+  if pg_trigger_depth() > 1 then
+    return case when tg_op = 'DELETE' then old else new end;
+  end if;
   raise exception using message = 'Registro imutável: crie um lançamento de correção.', hint = 'imutavel', errcode = 'P0001';
 end $$;
 

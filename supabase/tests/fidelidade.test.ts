@@ -223,3 +223,27 @@ describe("recompensas", () => {
     expect((await loyalty(c))["Cartão Corte"]).toEqual({ points: 10, rewards: 0 });
   });
 });
+
+describe("exclusão definitiva (LGPD)", () => {
+  it("apagar o usuário no Auth remove a conta e o histórico pessoal; agenda e auditoria ficam sem identificação", async () => {
+    const c = await createUser(db.su);
+    await asAdmin("public.admin_adjust_loyalty($1, $2, 10, 'Migração de cartão de papel')", [c, cat.ruleCorte]);
+    const appt = await visit(c, "corte-barba");
+    await asAdmin("public.admin_anonymize_customer($1, 'Pedido do titular')", [c]);
+    // como o Supabase faz ao excluir o usuário em Authentication → Users
+    await db.su.query("delete from auth.users where id = $1", [c]);
+    const left = await db.su.query(
+      `select (select count(*)::int from public.profiles where id = $1) as perfis,
+              (select count(*)::int from public.loyalty_entries where customer_id = $1) as lancamentos,
+              (select count(*)::int from public.loyalty_rewards where customer_id = $1) as cortesias,
+              (select customer_id from public.appointments where id = $2) as cliente_do_horario,
+              (select count(*)::int from public.appointments where id = $2) as horario,
+              (select count(*)::int from public.audit_logs where entity_id = $1::text) as auditoria`,
+      [c, appt],
+    );
+    expect(left.rows[0]).toEqual({ perfis: 0, lancamentos: 0, cortesias: 0, cliente_do_horario: null, horario: 1, auditoria: left.rows[0].auditoria });
+    expect(left.rows[0].auditoria).toBeGreaterThan(0);
+    // fora da exclusão em cascata, o livro-razão continua imutável
+    await expect(db.su.query("delete from public.loyalty_entries")).rejects.toThrow(/imutável/);
+  });
+});
