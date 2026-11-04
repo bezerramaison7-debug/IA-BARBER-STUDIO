@@ -119,4 +119,8 @@ describe("ambiente", () => {
     expect(looksLikeSecretKey("sb_secret_abc")).toBe(true);
     expect(looksLikeSecretKey("sb_publishable_abc")).toBe(false);
   });
+
+  it("chave secreta como pública: o sistema não liga", () => {
+    expect(getSupabaseEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://abcd.supabase.co", NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "sb_secret_abc" })).toBeNull();
+  });
 });

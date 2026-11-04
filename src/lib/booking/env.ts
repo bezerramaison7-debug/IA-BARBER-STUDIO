@@ -16,6 +16,8 @@ export function getSupabaseEnv(env: Record<string, string | undefined> = {
   const url = env.NEXT_PUBLIC_SUPABASE_URL?.trim();
   const anonKey = (env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || env.NEXT_PUBLIC_SUPABASE_ANON_KEY)?.trim();
   if (!url || !anonKey) return null;
+  // Chave secreta no navegador daria acesso total ao banco: o sistema fica desligado.
+  if (looksLikeSecretKey(anonKey)) return null;
   if (!/^https:\/\/[^/]+$/.test(url) && !/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(url)) return null;
   return { url, anonKey };
 }

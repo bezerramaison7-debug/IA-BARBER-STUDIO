@@ -1,8 +1,16 @@
 import type { NextConfig } from "next";
 import { siteConfig } from "./src/config/site.config";
-import { getSupabaseEnv } from "./src/lib/booking/env";
+import { getSupabaseEnv, looksLikeSecretKey } from "./src/lib/booking/env";
 import { isIndexable } from "./src/lib/indexing";
 import { buildContentSecurityPolicy } from "./src/lib/security-headers";
+
+// Para o build se alguém colocar a chave secreta (service_role) numa variável pública.
+const publicKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+if (publicKey && looksLikeSecretKey(publicKey)) {
+  throw new Error(
+    "A chave em NEXT_PUBLIC_SUPABASE_* é a chave SECRETA do Supabase. Use a chave publishable/anon e troque a secreta no painel do Supabase.",
+  );
+}
 
 const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
