@@ -60,7 +60,8 @@ para a barbearia decidir:
 | B. Retirar se ainda estiver disponível | Ao desfazer, a cortesia disponível é cancelada e os 10 pontos voltam (saldo 9) | Se já estiver reservada ou resgatada, cai na opção A. Exige mudança no gatilho e teste |
 | C. Ajuste manual caso a caso | Mantém A e o administrador usa **Cancelar cortesia** quando achar justo | Já é possível hoje, com motivo registrado |
 
-**Decisão necessária:** qual opção vale para a D' Mellos. Até lá, a opção A segue ativa e a C fica
+**Decisão necessária:** qual opção vale para a D' Mellos. A arquitetura recomenda a **opção B**, que
+**aguarda validação comercial** e não foi implementada. Até lá, a opção A segue ativa e a C fica
 disponível.
 
 ## Recompensas
