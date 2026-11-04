@@ -5,7 +5,7 @@ const BASE = "https://destino.invalid";
  * Usa o parser de URL do navegador, que ignora tabulações e quebras de linha; assim
  * "/\t/outro-site.com" (que vira "//outro-site.com") também é recusado.
  */
-export function safeNext(next: string | null | undefined, fallback = "/minha-conta"): string {
+export function safeNext(next: string | null | undefined, fallback = "/admin"): string {
   if (!next || !next.startsWith("/")) return fallback;
   try {
     const url = new URL(next, BASE);

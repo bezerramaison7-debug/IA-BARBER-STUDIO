@@ -32,8 +32,8 @@ Supabase. Mudanças de regra devem ser anunciadas aos clientes antes. Pontos já
 - **Um agendamento conta uma única vez**: concluir duas vezes não soma em dobro.
 - **Desfazer uma conclusão estorna o ponto** com um lançamento negativo (motivo obrigatório). Refazer
   conta de novo, uma vez.
-- O cliente **não pode editar** o progresso: não há permissão de escrita nas tabelas de fidelidade, e as
-  funções de ajuste exigem administrador.
+- **Só o administrador** registra atendimentos e gera pontos. Não há conta de cliente nem consulta
+  pública por telefone; o progresso aparece na ficha do cliente, no painel.
 - **Livro-razão imutável**: cada ponto é uma linha em `loyalty_entries` (quem, quando, por quê). Nem o
   superusuário altera ou apaga um lançamento: correções são novos lançamentos.
 - Conclusões simultâneas no 10º ponto geram **uma única** recompensa (trava por cliente e cartão).
@@ -67,7 +67,8 @@ disponível.
 ## Recompensas
 
 ```
-disponível ──(cliente agenda a cortesia)──▶ reservada ──(barbearia conclui)──▶ resgatada
+disponível ──(admin registra com cortesia)──▶ reservada ──(barbearia conclui)──▶ resgatada
+disponível ──(admin registra atendimento no balcão com cortesia)──────────────▶ resgatada
    ▲                                          │
    └──── cancelamento ou expiração ───────────┤
                                               └── falta ──▶ perdida (se "Falta faz perder" estiver ligado;
@@ -82,19 +83,20 @@ disponível ──(administrador cancela, com motivo)──▶ cancelada (os pon
 ## Como o administrador valida atendimentos
 
 1. Depois do atendimento, em **Painel → Hoje** ou **Agenda**, toque em **Concluir** no agendamento
-   confirmado. O ponto entra no cartão automaticamente.
+   confirmado. Se o cliente não tinha horário marcado, use **Hoje → Registrar atendimento**. O ponto
+   entra no cartão automaticamente.
 2. Se o cliente faltou, toque em **Não compareceu**. Não há ponto, e uma cortesia reservada segue a regra
    de falta.
 3. Errou? Toque em **Desfazer (corrigir)** e informe o motivo. O status volta a confirmado e o ponto é
    estornado.
 
-## Como o cliente resgata
+## Como a cortesia é usada
 
-1. Em **Minha conta**, o cartão mostra o progresso ("7/10 · Faltam 3 cortes para seu próximo corte
-   gratuito") e as cortesias disponíveis.
-2. **Agendar cortesia** abre o agendamento com o serviço já escolhido e marcado como cortesia.
-3. A revisão e a mensagem de WhatsApp indicam "Cortesia". A barbearia confirma como de costume.
-4. Ao concluir o atendimento, a cortesia vira **resgatada**.
+1. Na ficha do cliente, o cartão mostra o progresso (barra e "Faltam 3 atendimentos…") e as cortesias
+   disponíveis. O cliente pergunta no balcão ou pelo WhatsApp.
+2. Ao registrar o agendamento (Agenda) ou o atendimento no balcão (Hoje) do serviço do cartão, marque
+   **Usar cortesia do cliente**.
+3. Ao concluir, a cortesia vira **resgatada**. Ela não volta a aparecer e não gera ponto.
 
 ## Ajustes manuais
 

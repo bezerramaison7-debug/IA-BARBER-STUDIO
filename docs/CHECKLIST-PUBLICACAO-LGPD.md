@@ -38,7 +38,8 @@ automaticamente: se estiverem errados, `npm run build` falha e diz o que corrigi
 - [ ] **(build)** Responsável (`legal.controllerName`), e-mail para pedidos de dados (`legal.privacyEmail`) e data da política
 - [ ] Política de privacidade (`/privacidade`) lida e aprovada pelo cliente
 - [ ] Essencial/Premium: o site continua sem cadastro, cookies, `localStorage`, analytics ou pixels.
-      Profissional: só a sessão de login (estritamente necessária), descrita em `/privacidade` e `/cookies`.
+      Profissional: visitante sem cookies nem armazenamento; só a sessão de login da equipe (estritamente
+      necessária), descrita em `/privacidade` e `/cookies`.
       **Se analytics, pixel ou cookie de terceiros for adicionado**, as políticas precisam ser reescritas
       e é necessário um aviso de cookies com consentimento
 - [ ] `/cookies` e `/termos` lidos e aprovados pelo cliente
@@ -76,17 +77,18 @@ Só se o cliente contratou o agendamento online. Detalhes em [HOSPEDAGEM.md](HOS
       fictício **não** foi usado
 - [ ] Variáveis na hospedagem: `NEXT_PUBLIC_SUPABASE_URL` e chave **publishable/anon** (**(build)** o build
       falha se for a chave secreta), `SITE_PLAN=profissional` ou `plan: "profissional"`
-- [ ] Auth: confirmação de e-mail ligada, senha mínima 8, Site URL e Redirect URLs com o domínio final
-- [ ] SMTP próprio configurado, domínio verificado (SPF/DKIM) e modelos de e-mail com `token_hash`
-- [ ] E-mails de teste recebidos: confirmação de conta e recuperação de senha
-- [ ] Primeiro administrador criado (`bootstrap_first_admin`), e a pessoa da barbearia sabe usar o painel
-      ([MANUAL-ADMIN.md](MANUAL-ADMIN.md))
+- [ ] Auth: **cadastro público desligado** ("Allow new users to sign up"), senha mínima 8, Site URL com o
+      domínio final. SMTP não é necessário
+- [ ] Duas contas de administrador (dono e responsável técnico) criadas em Add user e liberadas
+      (`bootstrap_first_admin` para a primeira); senhas provisórias trocadas
+- [ ] O dono sabe usar o painel e o procedimento de recuperação de acesso ([MANUAL-ADMIN.md](MANUAL-ADMIN.md))
 - [ ] WhatsApp oficial salvo em **Painel → Configurações** e testado com uma mensagem
 - [ ] Nome do programa de fidelidade e cartões conferidos com o cliente (regras anunciadas)
-- [ ] `legal.emailProvider` preenchido. A política cita Supabase, hospedagem e e-mail como operadores
+- [ ] Política de privacidade revisada: cita Supabase e hospedagem como operadores e o WhatsApp (Meta)
 - [ ] **Advisors → Security** do Supabase sem alertas
-- [ ] Ensaio completo com uma conta de teste (e-mail de teste, nunca de cliente): cadastro → confirmação →
-      agendar → painel confirma → concluir → ponto no cartão → cancelar a conta de teste
+- [ ] Ensaio completo com dados de teste (nunca de cliente): pedido pelo site → mensagem no WhatsApp →
+      cliente cadastrado → agendamento registrado → atendimento concluído → ponto no cartão → cliente
+      de teste excluído
 - [ ] Rotina de backup combinada (`pg_dump` cifrado, fora do GitHub) e o cliente ciente da pausa do
       Supabase Free por inatividade
 

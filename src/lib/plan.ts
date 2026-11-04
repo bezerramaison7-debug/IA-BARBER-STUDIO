@@ -45,7 +45,7 @@ export function getServicesWithPage(config: Pick<SiteConfig, "plan" | "services"
 
 /**
  * Módulo de agendamento/fidelidade (V3) ativo: plano com o recurso E projeto Supabase
- * configurado. Sem isso as rotas /agendar, /entrar, /minha-conta e /admin respondem 404
+ * configurado. Sem isso as rotas /agendar, /entrar e /admin respondem 404
  * e o site continua idêntico à V2 (é o caso da demonstração pública).
  */
 export function isBookingSystemEnabled(config: Pick<SiteConfig, "plan">): boolean {

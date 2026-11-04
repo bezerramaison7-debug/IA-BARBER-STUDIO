@@ -3,7 +3,7 @@ import { isValidBrazilianWhatsApp } from "@/lib/whatsapp";
 export type AppointmentStatus = "pendente" | "confirmado" | "concluido" | "cancelado" | "nao_compareceu" | "expirado";
 
 export const STATUS_LABEL: Record<AppointmentStatus, string> = {
-  pendente: "Aguardando confirmação",
+  pendente: "Aguardando o cliente",
   confirmado: "Confirmado",
   concluido: "Concluído",
   cancelado: "Cancelado",

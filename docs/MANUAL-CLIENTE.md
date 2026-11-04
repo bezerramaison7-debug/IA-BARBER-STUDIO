@@ -1,52 +1,39 @@
 # Manual do cliente
 
-Texto-base para a barbearia explicar o agendamento online (pode virar post, mensagem ou cartaz).
+Texto-base para a barbearia explicar o pedido de horário pelo site (pode virar post, mensagem ou cartaz).
 
-## Criar conta
+## Pedir um horário (sem conta)
 
-1. Toque em **Agendar online** ou vá em **Entrar → Criar conta**.
-2. Informe **nome completo, telefone com DDD, e-mail e senha** (pelo menos 8 caracteres, com letras e
-   números). Receber novidades é opcional e vem desmarcado.
-3. Abra o e-mail de confirmação e toque no link. Sem confirmar o e-mail, não é possível pedir horário.
+1. Toque em **Solicitar horário** no site.
+2. Escolha o **serviço**, o **profissional** (ou "sem preferência"), a **data** e um **horário livre**.
+3. Informe seu **nome** e **telefone** (e uma observação, se quiser).
+4. Toque em **Preparar mensagem no WhatsApp** e depois em **Abrir o WhatsApp com a mensagem**.
+5. Confira a mensagem e envie.
 
-Esqueceu a senha? **Entrar → Esqueci minha senha**: chega um link para criar uma nova.
+**O horário ainda não está reservado** quando você envia. Ele fica garantido quando a barbearia
+responder confirmando. Se alguém ocupar o horário antes, a barbearia combina outro com você.
 
-## Agendar
+Não precisa de conta, senha, e-mail nem aplicativo novo. O site não grava seu nome e telefone: eles vão
+só na mensagem que você envia.
 
-1. **Serviço**: veja duração e preço.
-2. **Profissional**: escolha um ou **Sem preferência** (o sistema escolhe um livre).
-3. **Data**: só aparecem dias com horário livre.
-4. **Horário**: só aparecem horários que cabem o serviço inteiro.
-5. **Revisão**: confira tudo e, se quiser, deixe uma observação.
-6. Toque em **Solicitar agendamento**.
+## Desmarcar ou remarcar
 
-Aparece **"Solicitação registrada. Seu horário aguarda confirmação da barbearia."** com um
-**protocolo**. Se quiser, toque em **Enviar confirmação pelo WhatsApp**: a mensagem já vai pronta.
-**O horário só está garantido quando a barbearia confirmar.** Você acompanha isso em Minha conta.
+Fale com a barbearia pelo WhatsApp.
 
-Se outra pessoa reservar o mesmo horário um instante antes, o site avisa e você escolhe outro.
+## Programa de fidelidade
 
-## Minha conta
+- A cada **10 cortes** atendidos, você ganha **1 corte grátis**. A cada **10 combos cabelo + barba**,
+  **1 combo grátis**. Os cartões são separados.
+- Quem registra os atendimentos é a barbearia. Para saber quanto falta, pergunte no balcão ou pelo
+  WhatsApp.
+- Para usar a cortesia, avise ao combinar o horário.
+- Cancelamento, falta e o próprio atendimento de cortesia não contam pontos. A cortesia é pessoal e não
+  vale dinheiro.
 
-- **Próximos horários** com a situação de cada um: Pendente, Confirmado, Concluído, Cancelado, Não
-  compareceu ou Expirado.
-- **Cancelar** ou **Reagendar** pelo site até o prazo definido pela barbearia. Depois disso, fale com a
-  barbearia pelo WhatsApp.
-- **Histórico** de atendimentos.
-- **Fidelidade**: um cartão para cortes e outro para combos de cabelo e barba. Por exemplo, "7/10:
-  faltam 3 cortes para seu próximo corte gratuito". Ao completar, a cortesia aparece em **Cortesias
-  disponíveis** → **Agendar cortesia**.
-- **Meus dados**: corrigir nome e telefone e ligar ou desligar as novidades.
-- **Alterar senha**.
-- **Privacidade e meus dados**: **Baixar meus dados** (arquivo com tudo o que guardamos sobre você) e
-  pedidos à barbearia (acesso, correção, exclusão da conta, revogar consentimento).
+## Seus dados
 
-## Regras da fidelidade, em resumo
-
-- Conta só atendimento **concluído** (marcado pela barbearia depois do horário).
-- Cancelamento, falta e cortesia não contam pontos.
-- A cortesia é pessoal, vale só para o serviço do cartão e não é trocada por dinheiro.
-- Faltar a um horário de cortesia pode fazer perdê-la.
+Se você é cliente cadastrado, pode pedir à barbearia uma cópia, a correção ou a exclusão dos seus dados,
+pelo WhatsApp, no balcão ou pelo e-mail da Política de Privacidade.
 
 ## Pagamento
 

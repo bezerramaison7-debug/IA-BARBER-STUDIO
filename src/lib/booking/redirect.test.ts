@@ -4,7 +4,7 @@ import { safeNext } from "./redirect";
 describe("destino depois do login", () => {
   it("aceita caminhos do próprio site, com busca", () => {
     expect(safeNext("/agendar?servico=degrade&hora=x")).toBe("/agendar?servico=degrade&hora=x");
-    expect(safeNext(null)).toBe("/minha-conta");
+    expect(safeNext(null)).toBe("/admin");
   });
 
   it("recusa outros sites, inclusive com truques de barra e caracteres de controle", () => {

@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { siteConfig } from "@/config/site.config";
 import { LegalBlock as Block, LegalPage } from "@/components/ui/legal";
 import { getFeatures, isBookingSystemEnabled } from "@/lib/plan";
@@ -16,15 +15,15 @@ const linkClass = "text-accent underline underline-offset-4";
 /**
  * Política de privacidade montada a partir do comportamento real do site.
  * Sem o sistema de agendamento (planos essencial/premium ou sem Supabase): sem cadastro, sem cookies,
- * sem armazenamento no navegador e sem análise. Com o sistema (plano profissional + Supabase): conta,
- * agendamentos, fidelidade e a sessão guardada no navegador. Recurso novo que trate dados = rever esta página.
+ * sem armazenamento no navegador e sem análise. Com o sistema (plano profissional + Supabase): o
+ * visitante consulta horários e envia o pedido pelo WhatsApp, sem conta; a barbearia cadastra os
+ * clientes que atende no painel. Recurso novo que trate dados = rever esta página.
  */
 export default function PrivacyPage() {
   const { business, legal } = siteConfig;
   const features = getFeatures(siteConfig);
-  const accounts = isBookingSystemEnabled(siteConfig);
+  const system = isBookingSystemEnabled(siteConfig);
   const hosting = legal.hostingProvider ?? "Vercel";
-  const email = legal.emailProvider ?? "o serviço de envio de e-mail contratado pela barbearia";
 
   return (
     <LegalPage title="Privacidade" updated={formatIsoDate(legal.privacyUpdatedAt)} demo={siteConfig.demo}>
@@ -36,78 +35,85 @@ export default function PrivacyPage() {
         </p>
       </Block>
 
-      {accounts ? (
+      {system ? (
         <>
-          <Block title="O que coletamos">
-            <p>Para você agendar online, pedimos uma conta com apenas quatro dados:</p>
+          <Block title="Você não precisa criar conta">
+            <p>
+              Para pedir um horário, você escolhe serviço, profissional, data e horário livre e informa nome e
+              telefone. Não há cadastro, senha nem login para clientes.
+            </p>
+          </Block>
+
+          <Block title="O que fica no seu navegador">
+            <p>
+              Nome, telefone e observação que você digita na tela de pedido ficam só na memória da página, no seu
+              aparelho. Eles <strong>não são gravados</strong> por este site nem enviados ao nosso banco de dados,
+              e não aparecem no endereço da página. Se você fechar a página, eles se perdem.
+            </p>
+            <p>
+              Para mostrar os horários livres, a página consulta o nosso banco de dados (Supabase). Essa consulta
+              leva só o serviço, o profissional e a data escolhidos, nunca seus dados.
+            </p>
+          </Block>
+
+          <Block title="O que vai para o WhatsApp">
+            <p>
+              Ao tocar em “Abrir o WhatsApp com a mensagem”, o texto (serviço, profissional, data, horário, nome,
+              telefone e observação) vai no próprio link para o WhatsApp, um serviço da Meta, que trata esses dados
+              conforme a política dele. Você revisa a mensagem e decide se envia. Ao enviar, a mensagem chega ao
+              WhatsApp da {business.name}. O pedido <strong>não é uma reserva</strong>: o horário só fica garantido
+              quando a barbearia confirma.
+            </p>
+          </Block>
+
+          <Block title="O que a barbearia grava">
+            <p>
+              Quando a barbearia confirma um horário com você ou atende você, ela pode cadastrar no painel:
+            </p>
             <ul className="list-disc space-y-1 pl-6">
-              <li>nome completo, para identificar o atendimento;</li>
-              <li>telefone com DDD, para a barbearia falar com você sobre o horário;</li>
-              <li>e-mail, para entrar na conta, confirmá-la e recuperar a senha;</li>
-              <li>senha, guardada apenas de forma cifrada (nem a barbearia consegue lê-la).</li>
+              <li>nome e telefone, e observações sobre o atendimento (por exemplo, preferência de corte);</li>
+              <li>agendamentos e atendimentos (serviço, profissional, data, horário e situação);</li>
+              <li>o cartão do programa de fidelidade: atendimentos que contam, cortesias e correções.</li>
             </ul>
             <p>
-              Ao usar o sistema, registramos também seus agendamentos (serviço, profissional, data, horário,
-              situação e observações que você escrever), o histórico do programa de fidelidade e a data em que
-              você aceitou ou recusou receber novidades. Não pedimos CPF, endereço, data de nascimento ou foto.
+              Uso: organizar a agenda, falar com você sobre o horário e manter o programa de fidelidade (execução
+              do serviço que você pediu, LGPD art. 7º, V). Não pedimos CPF, endereço, e-mail, data de nascimento
+              nem foto. Não vendemos dados nem usamos para publicidade.
+            </p>
+            <p>
+              Só a equipe autorizada acessa esses dados, por login no painel. Não existe consulta pública por
+              telefone, e cada abertura de ficha fica registrada. Telefones podem ser compartilhados (família) ou
+              mudar de dono: a barbearia não junta históricos de pessoas diferentes automaticamente.
             </p>
           </Block>
 
-          <Block title="Para que usamos e com que base legal">
+          <Block title="Dados técnicos dos provedores">
+            <p>
+              A hospedagem ({hosting}) e o banco de dados (Supabase) registram dados técnicos de acesso, como
+              endereço IP, navegador, data e página ou consulta feita, para manter o serviço funcionando e seguro.
+              Esses serviços processam dados em nome da barbearia (operadores) e podem manter servidores fora do
+              Brasil, com as garantias previstas no art. 33 da LGPD.
+            </p>
+          </Block>
+
+          <Block title="Registros, prazos e cópias de segurança">
             <ul className="list-disc space-y-2 pl-6">
+              <li>Cadastro e histórico: enquanto você for cliente ou até pedir a exclusão.</li>
               <li>
-                Conta, agendamentos e fidelidade: para prestar o serviço que você pediu (LGPD, art. 7º, V).
+                Registro de atividades do painel (quem fez o quê e quando, com o identificador interno e o motivo
+                informado): guardado para segurança e prestação de contas, por interesse legítimo (art. 7º, IX).
               </li>
               <li>
-                Registros de segurança (tentativas de acesso, alterações feitas no painel da barbearia e limite
-                de pedidos): para proteger sua conta e evitar abuso, por interesse legítimo (art. 7º, IX).
+                Se você pedir a exclusão, a barbearia apaga nome, telefone, observações, pontos e cortesias e cancela
+                horários futuros. Ficam, <strong>sem identificação direta</strong>, os registros de agendamento
+                (serviço, profissional, data) e de atividades, além do que a lei obrigar a guardar.
               </li>
               <li>
-                Novidades e promoções: só se você marcar essa opção, que vem desmarcada. Você pode desmarcar a
-                qualquer momento em Minha conta (consentimento, art. 7º, I).
-              </li>
-            </ul>
-            <p>Não vendemos dados, não usamos para publicidade de terceiros e não fazemos perfis automatizados.</p>
-          </Block>
-
-          <Block title="Quem trata os dados conosco">
-            <p>Estes serviços processam dados em nome da barbearia (operadores), só para fazer o sistema funcionar:</p>
-            <ul className="list-disc space-y-1 pl-6">
-              <li>Supabase: banco de dados e login;</li>
-              <li>{hosting}: hospedagem do site;</li>
-              <li>{email}: envio dos e-mails de confirmação de conta e de troca de senha.</li>
-            </ul>
-            <p>
-              Esses serviços podem manter servidores fora do Brasil. Nesse caso, a transferência segue as
-              garantias contratuais deles (LGPD, art. 33). Somente pessoas autorizadas da barbearia acessam o
-              painel, e cada consulta à ficha de um cliente fica registrada.
-            </p>
-          </Block>
-
-          <Block title="Por quanto tempo guardamos">
-            <ul className="list-disc space-y-2 pl-6">
-              <li>Dados da conta: enquanto a conta existir.</li>
-              <li>
-                Pedidos de horário não confirmados expiram sozinhos no prazo definido pela barbearia, e o horário
-                volta a ficar livre.
-              </li>
-              <li>
-                Se você pedir a exclusão, a barbearia remove seu nome, telefone e e-mail do cadastro e depois
-                apaga sua conta de acesso. Ficam apenas registros sem identificação (por exemplo, que houve um
-                corte em certa data), necessários para a agenda, a segurança e estatísticas internas, além do
-                que a lei obrigar a guardar. Cópias de segurança anteriores ao pedido são apagadas quando
-                expiram.
+                Logs técnicos dos provedores seguem os prazos deles. Cópias de segurança feitas pela barbearia contêm o
+                cadastro da época e são substituídas no prazo combinado. Até lá, os dados excluídos ainda podem existir
+                nessas cópias.
               </li>
             </ul>
-          </Block>
-
-          <Block title="No seu navegador">
-            <p>
-              Para manter você conectado, o site guarda a sessão de login no armazenamento local do navegador.
-              Esse registro é estritamente necessário para a conta funcionar e é apagado quando você sai. Não
-              usamos cookies de estatística, publicidade ou rastreamento. Detalhes em{" "}
-              <Link href="/cookies" className={linkClass}>Cookies</Link>.
-            </p>
           </Block>
         </>
       ) : (
@@ -119,18 +125,18 @@ export default function PrivacyPage() {
         </Block>
       )}
 
-      <Block title="WhatsApp">
-        <p>
-          {accounts
-            ? "Depois de solicitar um horário, você pode abrir o WhatsApp com uma mensagem pronta (protocolo, serviço, data e horário). Abrir o WhatsApp não confirma o horário: a confirmação é feita pela barbearia no sistema."
-            : features.bookingForm
+      {!system && (
+        <Block title="WhatsApp">
+          <p>
+            {features.bookingForm
               ? "O formulário de agendamento não envia nada para este site. O que você escreve fica no seu navegador até você tocar em enviar; nesse momento o WhatsApp abre com a mensagem pronta, e você decide se envia."
               : "Os botões de WhatsApp abrem o aplicativo com uma mensagem pronta, e você decide se envia."}{" "}
-          O WhatsApp é um serviço da Meta, com política de privacidade própria. As mensagens recebidas são
-          usadas pela {business.name} apenas para responder e agendar o atendimento que você pediu (LGPD,
-          art. 7º, V).
-        </p>
-      </Block>
+            O WhatsApp é um serviço da Meta, com política de privacidade própria. As mensagens recebidas são
+            usadas pela {business.name} apenas para responder e agendar o atendimento que você pediu (LGPD,
+            art. 7º, V).
+          </p>
+        </Block>
+      )}
 
       <Block title="Mapa">
         <p>
@@ -139,25 +145,27 @@ export default function PrivacyPage() {
         </p>
       </Block>
 
-      <Block title="Hospedagem e links externos">
-        <p>
-          O site é hospedado pela {hosting}, que registra dados técnicos de acesso (como endereço IP,
-          navegador e página visitada) para manter o serviço funcionando e seguro. Links para redes sociais
-          levam a sites de terceiros, com políticas próprias.
-        </p>
-      </Block>
+      {!system && (
+        <Block title="Hospedagem e links externos">
+          <p>
+            O site é hospedado pela {hosting}, que registra dados técnicos de acesso (como endereço IP,
+            navegador e página visitada) para manter o serviço funcionando e seguro. Links para redes sociais
+            levam a sites de terceiros, com políticas próprias.
+          </p>
+        </Block>
+      )}
 
       <Block title="Seus direitos">
         <p>
           Pela Lei Geral de Proteção de Dados (Lei nº 13.709/2018, art. 18), você pode pedir a confirmação
-          de que tratamos seus dados, acesso, correção, portabilidade, anonimização ou eliminação, informações
-          sobre com quem eles são compartilhados e revogar um consentimento dado.
+          de que tratamos seus dados, acesso e cópia, correção, eliminação, informações sobre com quem eles são
+          compartilhados e opor-se a um uso.
         </p>
-        {accounts && (
+        {system && (
           <p>
-            Em <Link href="/minha-conta" className={linkClass}>Minha conta</Link> você corrige seus dados, baixa
-            uma cópia deles e faz pedidos de privacidade (como a exclusão da conta). A barbearia responde em
-            até 15 dias.
+            Como não há conta de cliente, o pedido é feito diretamente à barbearia, pelo WhatsApp, no balcão ou pelo
+            e-mail abaixo. A barbearia registra o pedido, pode confirmar que é você antes de entregar dados e responde
+            em até 15 dias.
           </p>
         )}
         <p>

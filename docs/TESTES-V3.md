@@ -22,60 +22,57 @@ createuser -p 54329 -s postgres   # se necessário
 npm run test:db
 ```
 
-## Os 22 testes obrigatórios
+## Os 22 testes obrigatórios (adaptados à V3 simplificada)
 
-| # | Requisito | Onde está a evidência |
+Com a simplificação, o cliente **não tem conta**. Os itens 1–3 e 12–13, escritos para o login de
+cliente, passaram a valer para o modelo atual: login só da equipe, e o visitante não acessa dados.
+
+| # | Requisito | Evidência |
 | --- | --- | --- |
-| 1 | Cliente cria conta | `v3.test.tsx`: "cadastro valida os 4 campos…" e "cadastro válido envia só nome, telefone, e-mail, senha…"; `seguranca.test.ts`: "recusa cadastro sem nome ou com telefone inválido" (gatilho `handle_new_user`) |
-| 2 | Cliente entra com e-mail e senha | `v3.test.tsx`: "login com senha errada mostra mensagem compreensível"; login válido validado no navegador contra o servidor simulado (capturas em `docs/auditoria/v3/`) |
-| 3 | Cliente recupera senha | `v3.test.tsx`: "pede o link para /redefinir-senha…", "o link do e-mail valida o token…", "nova senha fraca é recusada…" |
-| 4 | Cliente consulta horários disponíveis | `agenda.test.ts`: "respeita expediente, intervalo e duração", "não oferece dias passados…", "dia sem expediente…" |
-| 5 | Cliente solicita agendamento | `agenda.test.ts`: "cria PENDENTE com protocolo…", "exige e-mail confirmado", "recusa horário passado…"; `v3.test.tsx`: "solicita, mostra PENDENTE…" |
-| 6 | Sistema salva a solicitação | `agenda.test.ts`: "cria PENDENTE com protocolo…", "clique repetido (mesma chave) não duplica", "histórico de status é registrado" |
-| 7 | WhatsApp recebe a mensagem pré-preenchida | `booking.test.ts`: "segue o modelo com protocolo…", "usa o número oficial válido…", "sem número válido… abre sem destinatário"; `v3.test.tsx`: link `wa.me` e "abrir o WhatsApp não confirma" |
-| 8 | Admin confirma agendamento | `agenda.test.ts`: "confirma, e cliente não pode confirmar"; `v3.test.tsx`: "pendente oferece confirmar e cancelar…" |
-| 9 | Horário confirmado deixa de estar disponível | `agenda.test.ts`: "confirma, e cliente não pode confirmar" (confere a agenda pública depois) |
-| 10 | Admin altera expediente | `agenda.test.ts`: "mudar expediente com agendamento existente…", "recusa expediente inválido" |
-| 11 | Agenda pública reflete a alteração | `agenda.test.ts`: "mudar expediente…" (consulta `available_slots` como visitante logo após salvar) |
-| 12 | Cliente não acessa dados de outro cliente | `seguranca.test.ts`: "só enxerga os próprios dados", "não altera dados de outra pessoa", "não cancela agendamento de outra pessoa", "idempotência não vaza agendamento alheio…" |
-| 13 | Cliente não acessa painel admin | `seguranca.test.ts`: "não acessa nenhuma função administrativa", "edita o próprio nome… mas não o próprio papel" |
-| 14 | Admin bloqueia horário | `agenda.test.ts`: "bloqueio remove horários e respeita a decisão sobre conflitos", "feriado para todos… fecha o dia inteiro" |
-| 15 | Dois clientes não reservam o mesmo horário ao mesmo tempo | `agenda.test.ts`: "duas pessoas ao mesmo tempo…: exatamente uma consegue", "10 tentativas simultâneas com durações diferentes: nenhuma sobreposição" (conexões separadas, concorrência real); `corrida.test.ts`: administração × solicitação e mesma chave simultânea |
-| 16 | Atendimento concluído incrementa fidelidade | `fidelidade.test.ts`: "10 cortes concluídos geram 1 corte grátis; os cartões são separados", "serviço fora do programa não pontua" |
-| 17 | Décimo atendimento gera recompensa | `fidelidade.test.ts`: mesmo teste do item 16; "conclusões simultâneas no 10º ponto geram uma única recompensa" |
-| 18 | Recompensa é usada só uma vez | `fidelidade.test.ts`: "agendamento com recompensa é cortesia…: consumida uma vez", "duas reservas simultâneas com a mesma recompensa: só uma passa", "recompensa de corte não vale para combo", "cliente não usa recompensa de outra pessoa" |
-| 19 | Cancelamento ou reversão não gera pontos indevidos | `fidelidade.test.ts`: "falta e cancelamento não pontuam", "concluir duas vezes não conta em dobro; desfazer estorna…", "não é possível concluir um horário futuro", "cancelar devolve a recompensa; falta faz perder", "cancelar recompensa devolve os pontos"; `seguranca.test.ts`: "não fabrica pontos, recompensas nem agendamentos diretos" |
-| 20 | Fluxos funcionam no celular | Navegador real (Chromium, 375×812 e 1440×900) contra servidor simulado: sem rolagem horizontal, sem erros no console, alvos de toque ≥ 44 px. Capturas em `docs/auditoria/v3/` |
-| 21 | Site demonstrativo mantém avisos fictícios | `plan.test.ts` e `validate-config.test.ts` (demo, noindex, WhatsApp vazio); regressão V2 no navegador (26 verificações: noindex, nenhum `wa.me` com número, avisos); `seed.test.ts`: "aplica sem erro, sem WhatsApp…" |
-| 22 | Publicação real continua sujeita ao checklist | `validate-config.test.ts` (regras de site real no build); [CHECKLIST-PUBLICACAO-LGPD.md](CHECKLIST-PUBLICACAO-LGPD.md) atualizado com os itens da V3 |
+| 1 | Cadastro | Sem conta de cliente. A barbearia cadastra no painel: `seguranca.test.ts` "normaliza o telefone e recusa número inválido…", "telefone repetido é permitido… sem juntar históricos"; `v3.test.tsx` "telefone já cadastrado…" |
+| 2 | Login | Só equipe: `v3.test.tsx` "login com senha errada…", "login certo vai para o painel"; `seguranca.test.ts` "conta criada no Auth nasce sem acesso" |
+| 3 | Recuperação de acesso | Sem e-mail: `seguranca.test.ts` "recuperação quando ninguém consegue entrar: apagar a conta perdida no Auth libera o bootstrap"; `v3.test.tsx` "troca de senha logado…" |
+| 4 | Consulta de horários disponíveis | `agenda.test.ts` "respeita expediente, intervalo e duração", "não oferece dias passados…", "a consulta pública não revela quem agendou"; `v3.test.tsx` "mostra só os horários livres…" |
+| 5 | Solicitação | `v3.test.tsx` "nome e telefone geram a mensagem do WhatsApp sem gravar nada e sem dizer que reservou", "valida nome e telefone…" |
+| 6 | Registro da solicitação | Pela barbearia: `agenda.test.ts` "cria CONFIRMADO com protocolo…", "clique repetido (mesma chave) não duplica", "histórico de status é registrado"; `seguranca.test.ts` "não grava nada: nenhuma função pública reserva horário…" |
+| 7 | Mensagem pré-preenchida no WhatsApp | `booking.test.ts` "é um pedido, sem protocolo…", "usa o número oficial…", "sem número válido… abre sem destinatário" |
+| 8 | Admin confirma | `agenda.test.ts` "pendente → confirmado; conta sem acesso não confirma"; `v3.test.tsx` "pendente oferece confirmar e cancelar…" |
+| 9 | Horário confirmado deixa de estar disponível | `agenda.test.ts` "cria CONFIRMADO… e o horário deixa de aparecer", "pendente → confirmado…" |
+| 10 | Admin altera expediente | `agenda.test.ts` "mudar expediente com agendamento existente…", "recusa expediente inválido" |
+| 11 | Agenda pública reflete a alteração | `agenda.test.ts` "mudar expediente…" (consulta como visitante logo após salvar) |
+| 12 | Ninguém acessa dados de clientes sem ser admin | `seguranca.test.ts` "vê catálogo e horários livres, mas nenhum dado pessoal", "conta sem acesso… não lê dados pessoais" |
+| 13 | Ninguém acessa o painel sem ser admin | `seguranca.test.ts` "não acessa nenhuma função administrativa", "não se promove, não grava clientes nem fabrica pontos" |
+| 14 | Admin bloqueia horário | `agenda.test.ts` "bloqueio remove horários…", "feriado para todos…" |
+| 15 | Sem reserva dupla em operações simultâneas | `agenda.test.ts` "dois registros ao mesmo tempo… exatamente um passa", "10 tentativas simultâneas…"; `corrida.test.ts` (mudança de agenda × registro, feriado global, sem deadlock, mesma chave) |
+| 16 | Atendimento concluído incrementa fidelidade | `fidelidade.test.ts` "10 cortes concluídos…", "10 combos concluídos…", "serviço fora do programa e atendimento avulso não pontuam" |
+| 17 | Décimo atendimento gera recompensa | `fidelidade.test.ts` idem; "conclusões simultâneas no 10º ponto geram uma única recompensa" |
+| 18 | Recompensa usada só uma vez | `fidelidade.test.ts` "cortesia agendada… consumida uma vez", "cortesia no balcão…", "dois registros simultâneos com a mesma cortesia: só um passa", "não vale para combo nem para outro cliente" |
+| 19 | Cancelamento ou reversão não gera pontos indevidos | `fidelidade.test.ts` "falta e cancelamento não pontuam", "concluir duas vezes…; desfazer estorna…", "registro repetido do mesmo atendimento… não pontua duas vezes", "não é possível concluir um horário futuro", "cancelar devolve a cortesia; falta faz perder" |
+| 20 | Fluxos no celular | Chromium 375×812: pedido público e painel sem rolagem horizontal, alvos ≥ 44 px, sem erros; nenhum cookie ou armazenamento no navegador do visitante. Capturas em `docs/auditoria/v3/` |
+| 21 | Demonstração mantém avisos fictícios | `plan.test.ts`, `validate-config.test.ts`; regressão V2 no navegador; `seed.test.ts` |
+| 22 | Publicação real sujeita ao checklist | `validate-config.test.ts`; [CHECKLIST-PUBLICACAO-LGPD.md](CHECKLIST-PUBLICACAO-LGPD.md), seção 7 |
 
-## Testes adicionais
+## Outros testes
 
-- `corrida.test.ts` (transações coordenadas em conexões independentes; o teste espera a trava real em
-  `pg_stat_activity`, sem `sleep`):
-  - expediente reduzido pelo admin com solicitação concorrente: a solicitação espera e é recusada pela
-    regra nova;
-  - solicitação em andamento com o admin mudando o expediente: o admin espera e vê o conflito;
-  - feriado para todos: trava todos os profissionais, inclusive "sem preferência";
-  - expediente global, bloqueio e reagendamento ao mesmo tempo: nenhum deadlock;
-  - duas requisições simultâneas com a mesma `request_key`: um agendamento só, mesma resposta.
-- `fidelidade.test.ts`: desfazer o 10º atendimento depois da cortesia (política atual, ver
-  [PROGRAMA-FIDELIDADE.md](PROGRAMA-FIDELIDADE.md)).
+- `seguranca.test.ts`:
+  - funções do antigo login de cliente não existem mais;
+  - auditoria do cadastro sem nome nem telefone;
+  - acesso à ficha e exportação auditados;
+  - WhatsApp inválido recusado no banco;
+  - último administrador protegido;
+  - imutabilidade dos registros;
+  - pedido do titular registrado e respondido.
+- `fidelidade.test.ts`:
+  - exclusão do cliente: cadastro, pontos e cortesias apagados, horários futuros cancelados, agenda e
+    auditoria sem identificação;
+  - desfazer o 10º atendimento (política atual).
+- `agenda.test.ts`: pendente sem resposta expira e libera o horário; reagendar e cancelar pelo painel.
+- `security-headers.test.ts`, `redirect.test.ts`, `booking.test.ts` (fuso, telefone, chave secreta recusada).
 
-- `seguranca.test.ts`: visitante não vê dado pessoal; acesso à ficha auditado; WhatsApp inválido recusado
-  no banco; último administrador protegido; `bootstrap_first_admin` só uma vez e fora do alcance do site;
-  auditoria e livro-razão imutáveis até para o superusuário; anonimização; exportação dos próprios dados.
-- `fidelidade.test.ts`: exclusão definitiva do usuário no Auth (LGPD) com histórico removido e agenda
-  sem identificação.
-- `agenda.test.ts`: pendente expirado libera o horário; cliente cancela e reagenda; "sem preferência"
-  escolhe um profissional livre; limite de pedidos em aberto.
-- `security-headers.test.ts`: CSP. `booking.test.ts`: fuso de São Paulo, chave secreta recusada.
+## O que depende de ambiente externo
 
-## O que ainda não foi testado (depende de ambiente externo)
-
-- **Supabase real (Auth + PostgREST)**: os testes de banco usam Postgres com um shim do Auth, e os de
-  tela simulam a API. Falta um ensaio ponta a ponta num **projeto Supabase de desenvolvimento**
-  (gratuito) com SMTP configurado: cadastro → e-mail → confirmação → agendamento → painel → conclusão.
-  Depende de você criar o projeto e fornecer URL e chave pública (nunca a secreta).
-- **Hospedagem na Netlify**: deploy de teste pendente (ver [HOSPEDAGEM.md](HOSPEDAGEM.md)).
-- Celulares físicos (iOS Safari e Android Chrome): os testes foram em Chromium com emulação.
+- **Supabase real**: o projeto de homologação foi criado com a versão anterior (com login de cliente) e
+  precisa ser recriado com as migrations atuais. Isso exige autorização, porque apaga os dados
+  sintéticos que estão lá. Ver [HOMOLOGACAO-V3.md](HOMOLOGACAO-V3.md).
+- **Netlify**: o deploy de branch existe, mas faltam as variáveis do Supabase.
+- Celulares físicos (iOS Safari, Android Chrome).

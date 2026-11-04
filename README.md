@@ -2,8 +2,9 @@
 
 Modelo de site profissional para barbearias de Araraquara/SP e região, personalizado e vendido para
 estabelecimentos reais em dois planos, **Essencial** e **Premium**, a partir do mesmo código. A
-**V3** acrescenta um terceiro plano proposto, **Profissional**, com contas de cliente, agendamento
-online, painel da barbearia e programa de fidelidade (Supabase). A demonstração usa a marca fictícia
+**V3** acrescenta um terceiro plano proposto, **Profissional**: o cliente consulta horários livres e
+pede pelo WhatsApp, sem criar conta, e a barbearia opera agenda, clientes e fidelidade por um painel
+(Supabase). A demonstração usa a marca fictícia
 **Barber Studio**.
 
 > **Todo o conteúdo da demonstração é fictício**: nomes, preços, endereço e perfis da equipe. Não há
@@ -18,7 +19,7 @@ online, painel da barbearia e programa de fidelidade (Supabase). A demonstraçã
 | SEO básico e políticas de privacidade, cookies e termos | ✓ | ✓ | ✓ |
 | Equipe, dúvidas frequentes, formulário de solicitação de horário | | ✓ | ✓ |
 | Página própria por serviço e cores ajustáveis uma a uma | | ✓ | ✓ |
-| Conta do cliente, agendamento online em tempo real, Minha conta | | | ✓ |
+| Pedido de horário sem conta (horários livres em tempo real → WhatsApp) | | | ✓ |
 | Painel: confirmações, agenda, horários, folgas e feriados sem código | | | ✓ |
 | Programa de fidelidade (cartões separados, cortesias, auditoria) | | | ✓ |
 
@@ -32,8 +33,9 @@ Qualidade:
   campos, movimento reduzido respeitado (Lighthouse: 100)
 - **Performance**: páginas estáticas, imagens AVIF/WebP, fontes auto-hospedadas, mapa sob demanda
 - **Privacidade**: nos planos Essencial e Premium, sem cadastro, cookies, analytics ou backend (nada sai
-  do navegador até a pessoa enviar a mensagem no WhatsApp). No Profissional, só os 4 dados da conta,
-  sem cookies de rastreamento, com exportação e exclusão pelo próprio titular
+  do navegador até a pessoa enviar a mensagem no WhatsApp). No Profissional, o pedido de horário
+  também não grava nada (nome e telefone vão só na mensagem do WhatsApp); a barbearia cadastra no painel
+  quem atende, com exportação e exclusão a pedido do titular
 - **Segurança da V3**: regras e permissões no banco (RLS em todas as tabelas, funções que validam tudo),
   conflito de horário impossível por restrição do Postgres, CSP em produção
 - **Segurança comercial**: o build valida o config. Em modo demo, nenhum link leva a um número de
@@ -134,7 +136,7 @@ src/
     sections/          seções da página inicial
     seo/               JSON-LD
     ui/                botões, seções, ícones, páginas legais
-    app/               formulários de conta, agendamento, Minha conta, painel (V3)
+    app/               pedido de horário, login da equipe e painel (V3)
   config/
     site.config.ts     ← dados do cliente
     texts.ts           textos de interface padrão

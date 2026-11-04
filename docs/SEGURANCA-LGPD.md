@@ -1,161 +1,156 @@
 # Segurança e LGPD da V3
 
-Complementa o [checklist de publicação](CHECKLIST-PUBLICACAO-LGPD.md). Vale para sites com o
-sistema de agendamento ligado (plano profissional + Supabase).
+Complementa o [checklist de publicação](CHECKLIST-PUBLICACAO-LGPD.md). Vale quando o sistema de
+agendamento está ligado (plano profissional + Supabase).
 
 ## Modelo de segurança
 
-O navegador fala direto com o Supabase usando a **chave pública** (anon/publishable). Ela é feita para
-ser pública. A proteção está no banco:
-
-- **RLS em todas as 14 tabelas** e revogação dos privilégios amplos que o Supabase concede por padrão
-  (`20261104000300_v3_permissoes.sql`). Cada permissão foi concedida explicitamente.
-- Visitante lê só o catálogo (serviços, profissionais, expediente, regras de fidelidade e configurações
-  públicas). Nenhuma tabela com dado pessoal é legível sem login.
-- Cliente lê só as próprias linhas e edita só **nome, telefone e opção de marketing** (permissão por
-  coluna). O papel (`role`) não pode ser alterado pelo próprio usuário (gatilho `_guard_profile_update`).
-- Agendamentos, pontos e recompensas **não têm permissão de escrita direta**: só por funções
-  `SECURITY DEFINER` (com `search_path` vazio), que validam tudo. Não dá para fabricar pontos, horários
-  ou cortesias pela API.
-- Administração conferida **no banco** (`is_admin()`), não pela tela.
-- Imutáveis até para o superusuário: `audit_logs`, `loyalty_entries`, `appointment_status_history`. A
-  única exceção é a exclusão em cascata quando o titular é apagado no Auth.
-- Testes automáticos de permissão em `supabase/tests/seguranca.test.ts` (rodam no CI).
+- **Visitante sem conta, sem gravação.** O público só lê o catálogo e os horários livres
+  (`available_slots`/`available_days`, que devolvem horário e nome do profissional, nada pessoal).
+  Nenhuma função pública reserva horário ou cria cliente, então não há o que um robô ocupe ou preencha.
+- **Login só da equipe.** Cadastro público desligado no Supabase Auth. Uma conta criada no painel do
+  Supabase nasce **sem acesso** (`sem_acesso`) até um administrador liberar.
+- **RLS em todas as 15 tabelas**, com os privilégios amplos padrão do Supabase revogados
+  (`20261104000300_v3_permissoes.sql`). `customers`, agendamentos, fidelidade, auditoria e pedidos de
+  privacidade: só o administrador lê. Agendamentos e pontos só mudam por funções `SECURITY DEFINER`
+  (com `search_path` vazio), que validam tudo.
+- **Administração conferida no banco** (`is_admin()`), não pela tela.
+- **Imutáveis até para o superusuário**: `audit_logs`, `loyalty_entries` e `appointment_status_history`.
+  A única exceção é a exclusão em cascata quando um cliente é excluído.
+- **Telefone não é senha.** Ninguém consulta histórico ou fidelidade informando um telefone. O
+  cadastro aceita telefone repetido (família, número reatribuído) e mostra isso ao administrador, sem
+  juntar históricos.
+- Testes de permissão em `supabase/tests/seguranca.test.ts`, rodando no CI.
 
 ### Chaves e segredos
 
 | Chave | Onde pode ficar |
 | --- | --- |
 | URL do projeto e chave publishable/anon | Variáveis `NEXT_PUBLIC_*` da hospedagem |
-| `service_role` / chave secreta (`sb_secret_...`) | **Nunca** no site, no repositório ou em `NEXT_PUBLIC_*`. O site não precisa dela |
-| Senha do banco, token do Supabase | Só no gerenciador de senhas de quem mantém o site |
-
-O site recusa URL que não seja `https://` (exceto localhost), e `looksLikeSecretKey` detecta uma chave
-secreta colocada por engano.
+| `service_role` / chave secreta | **Nunca** no site, no repositório ou em `NEXT_PUBLIC_*` (o build falha se aparecer) |
+| Senha do banco, conta do Supabase | Só no gerenciador de senhas do responsável técnico |
 
 ### Cabeçalhos HTTP
 
-Em produção: `Content-Security-Policy` (o navegador só conversa com o próprio site e com o Supabase
-do cliente, e só embute o mapa do Google), `Strict-Transport-Security`, `X-Content-Type-Options`,
-`Referrer-Policy`, `X-Frame-Options` e `Permissions-Policy`. Ver `src/lib/security-headers.ts`.
+Em produção, o site envia:
+- `Content-Security-Policy`: o navegador só fala com o próprio site e com o Supabase do cliente, e só
+  embute o mapa do Google;
+- `Strict-Transport-Security`, `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options` e
+  `Permissions-Policy`.
 
-### Proteção contra abuso
-
-- Limites no banco: horários em aberto por conta (padrão 3) e pedidos por hora (padrão 6).
-- E-mail confirmado é obrigatório para pedir horário.
-- Tentativas de login: limitadas pelo Supabase Auth por IP (**Authentication → Rate Limits**). Mantenha
-  os padrões ou reduza.
-- Recomendado para a próxima fase: CAPTCHA gratuito (Cloudflare Turnstile ou hCaptcha) no cadastro e no
-  login, suportado pelo Supabase Auth. Exige uma chave do provedor e uma pequena mudança nos formulários.
+O cliente Supabase não lê sessão da URL (`detectSessionInUrl: false`), porque não há links de e-mail.
 
 ## Configuração obrigatória no Supabase (cada cliente)
 
-**Authentication → Sign In / Providers → Email**
+- **Authentication → Sign In / Providers → Email**:
+  - **"Allow new users to sign up" desligado** (sem cadastro público);
+  - senha mínima de 8 caracteres.
+- **Authentication → URL Configuration**: Site URL igual ao domínio do site.
+- **SMTP: não é necessário.** Não há e-mail de confirmação ou recuperação. As contas da equipe são
+  criadas já confirmadas.
+- **Advisors → Security**: os avisos "SECURITY DEFINER executável" são das funções da API, que validam
+  quem chama. Qualquer outro aviso (tabela sem RLS, por exemplo) precisa ser corrigido.
 
-- Confirm email: **ligado**.
-- Secure email change: ligado.
-- Minimum password length: **8**. Password requirements: letras e dígitos (o site já exige).
-- Leaked password protection: só em plano pago. Deixe desligado no Free.
+### Contas da equipe (provisionamento)
 
-**Authentication → URL Configuration**
+1. **Authentication → Users → Add user**: e-mail, senha provisória e **Auto Confirm User**.
+2. **Primeiro administrador**: no SQL Editor, `select public.bootstrap_first_admin('email');`. Só
+   funciona se ainda não houver administrador, e o site não consegue chamar essa função.
+3. **Demais pessoas**: um administrador libera em Painel → Configurações → Acesso ao painel. A mudança
+   fica auditada.
+4. Cada pessoa troca a senha provisória em **Alterar minha senha**.
 
-- Site URL: `https://dominio-do-cliente`.
-- Redirect URLs: `https://dominio-do-cliente/auth/confirmar` e `https://dominio-do-cliente/redefinir-senha`
-  (inclua o endereço de testes, se houver).
+Não existe conta de manutenção oculta nem acesso administrativo público.
 
-**Authentication → Emails (SMTP)**: SMTP próprio é necessário para clientes reais. Ver
-[HOSPEDAGEM.md](HOSPEDAGEM.md#e-mail).
+### Recuperação de acesso sem SMTP
 
-**Authentication → Emails (Templates)**: use os modelos com `token_hash` do HOSPEDAGEM.md, que
-funcionam em qualquer navegador.
+| Situação | Procedimento |
+| --- | --- |
+| Uma pessoa esqueceu a senha, e outro admin entra | Responsável técnico cria conta nova (Add user). O outro admin libera o acesso. A conta antiga é apagada em Authentication → Users |
+| **Nenhum administrador consegue entrar** | Responsável técnico apaga, em Authentication → Users, as contas sem acesso possível, cria a nova conta e roda `bootstrap_first_admin` (coberto por teste) |
+| Perdeu-se a conta do próprio Supabase | Recuperação pelo suporte do Supabase. Por isso, deixe o projeto numa organização com **dois membros** (dono e responsável técnico), cada um com verificação em duas etapas na conta Supabase |
 
-**Database**: não crie tabelas novas sem RLS. Rode as migrações na ordem e confira em
-**Advisors → Security** que não há alertas.
+Apagar uma conta da equipe não apaga dados de clientes: os registros que ela criou ficam com o autor
+vazio, e a auditoria guarda o identificador.
 
-### Primeiro administrador
+### TOTP (verificação em duas etapas) para administradores: avaliação
 
-Depois que a pessoa da barbearia criar a própria conta e confirmar o e-mail, rode **uma vez** no
-SQL Editor:
+- **Disponível no Supabase Auth** com aplicativos autenticadores, sem SMS e sem custo (conferir no painel
+  do projeto).
+- **Uma implementação correta exige três partes**:
+  1. tela de cadastro do fator (QR code, `supabase.auth.mfa.enroll`);
+  2. desafio no login (`mfa.challenge`/`verify`), que eleva a sessão para `aal2`;
+  3. **exigência no banco**: `is_admin()` precisa recusar sessões `aal1` de quem tem fator cadastrado.
 
-```sql
-select public.bootstrap_first_admin('email-da-pessoa@dominio');
-```
-
-A função só funciona se ainda não houver administrador, e o site não consegue chamá-la (sem `EXECUTE`
-para `anon`/`authenticated`).
+  Sem a parte 3, uma senha vazada ainda entra pela API.
+- **Fatores de recuperação**: o Supabase não emite códigos de recuperação. Mitigação: cada
+  administrador cadastra dois fatores (dois aparelhos), há sempre dois administradores, e o responsável
+  técnico pode remover um fator em Authentication → Users. Isso volta à tabela acima.
+- **Decisão**: não implementado nesta fase. É a próxima melhoria recomendada para o painel, com testes de
+  `aal2` no banco.
 
 ## LGPD
 
-| Tema | Como a V3 atende |
+### O que é tratado, e onde
+
+| Categoria | O quê | Onde fica | Base legal |
+| --- | --- | --- | --- |
+| Preenchido no navegador | Nome, telefone e observação do pedido | Só na memória da página. **Não vai ao banco nem à URL**, e nada fica no navegador | Não há tratamento pelo site |
+| Transmitido ao WhatsApp | O texto da mensagem | No link `wa.me`, enviado pelo próprio visitante. O WhatsApp (Meta) é controlador independente | Escolha do titular |
+| Gravado pela barbearia | Cadastro (nome, telefone, observações), agendamentos, atendimentos, fidelidade | `customers`, `appointments`, `loyalty_*` (só o admin) | Execução do serviço pedido (art. 7º, V) |
+| Registros de segurança | Quem fez o quê no painel, acessos e exportações de ficha | `audit_logs` (identificador interno e motivo, **sem nome nem telefone**) | Interesse legítimo (art. 7º, IX) |
+| Técnicos dos provedores | IP, navegador, data, consulta | Logs da hospedagem e do Supabase, pelos prazos deles | Interesse legítimo / operador |
+| Cópias de segurança | O banco inteiro na data da cópia | Arquivos `pg_dump` do responsável técnico (Supabase Free não faz backup) | Segurança |
+
+### Direitos do titular (sem conta de cliente)
+
+Os pedidos chegam à barbearia pelo WhatsApp, e-mail ou balcão e são **registrados pelo administrador**
+em Painel → Privacidade, com tipo, nome e contato de quem pediu, canal e resposta, tudo auditado. Antes
+de entregar dados, a barbearia confirma que é a própria pessoa (por exemplo, respondendo no mesmo
+WhatsApp do cadastro), porque o telefone pode ter mudado de dono.
+
+| Pedido | Como atender |
 | --- | --- |
-| Minimização | Cadastro com só 4 dados (nome, telefone, e-mail, senha). Sem CPF, endereço, nascimento ou foto |
-| Transparência | `/privacidade`, `/cookies` e `/termos` descrevem o comportamento real e mudam de texto quando o sistema está ligado |
-| Bases legais | Execução de contrato (conta, agenda, fidelidade), interesse legítimo (segurança e auditoria), consentimento (marketing, desmarcado por padrão e com data registrada) |
-| Cookies | Nenhum cookie de análise ou publicidade. Só a sessão de login no armazenamento local, estritamente necessária. Por isso não há banner |
-| Acesso e portabilidade | **Minha conta → Baixar meus dados** (JSON com perfil, agendamentos, fidelidade e pedidos) |
-| Correção | Minha conta → Meus dados |
-| Eliminação | Em **duas etapas**, a segunda manual: anonimização pelo painel e depois exclusão do login no Supabase Auth. Ver "Exclusão: o que cada etapa faz" |
-| Revogação de consentimento | Desmarcar novidades em Minha conta, ou pedido formal |
-| Registro de acesso | Toda abertura de ficha de cliente e toda mudança no painel ficam em `audit_logs` |
-| Operadores | Supabase (banco e Auth), hospedagem e provedor de e-mail, citados na política |
-| Transferência internacional | Citada na política (art. 33). Prefira a região `sa-east-1` (São Paulo) ao criar o projeto |
-| Prazo de resposta | 15 dias (painel → Privacidade) |
+| Acesso ou cópia | Ficha → **Exportar dados** (JSON, registrado na auditoria) |
+| Correção | Ficha → **Corrigir dados** |
+| Exclusão | Ficha → **Excluir cliente** (`admin_delete_customer`) |
+| Oposição ou outro | Registrar e responder em Privacidade |
 
-### Exclusão: o que cada etapa faz
+Prazo: 15 dias.
 
-A exclusão **só está completa depois da etapa 2**, que é manual. Até lá, não diga ao titular que os
-dados foram eliminados.
+### Exclusão: o que é apagado e o que fica
 
-**Etapa 1. Anonimização no banco da aplicação** (Painel → Clientes → *Excluir dados*;
-`admin_anonymize_customer`)
+**Apagado** por `admin_delete_customer`:
+- o cadastro (nome, telefone, observações);
+- os lançamentos de fidelidade e as cortesias;
+- as observações dos agendamentos.
 
-- Perfil: nome vira "Cliente removido", telefone é zerado, e-mail é apagado, marketing é desligado.
-- Horários pendentes ou confirmados são cancelados, cortesias disponíveis ou reservadas são canceladas,
-  e as observações dos agendamentos são apagadas.
-- A conta não agenda nem edita o perfil.
-- **Continua existindo**: o usuário no Supabase Auth, com e-mail, senha cifrada e os dados do cadastro
-  (nome e telefone ficam nos metadados do usuário). A pessoa ainda consegue entrar e ver o próprio
-  histórico anonimizado. Também continuam o livro-razão de fidelidade e as cortesias canceladas
-  ligados ao identificador interno.
+Os horários futuros são cancelados. Diferente da versão com login, **não há etapa manual**: não existe
+conta de cliente no Auth.
 
-**Etapa 2. Exclusão no Supabase Auth** (manual: Supabase → Authentication → Users → *Delete user*)
-
-- Apaga e-mail, senha e metadados do Auth.
-- Em cascata: apaga o perfil, os lançamentos de fidelidade e as cortesias.
-- Agendamentos ficam sem cliente (`customer_id` nulo).
-
-**Retenção legítima depois das duas etapas** (registros necessários para segurança, prestação de contas
-e estatística da agenda, sem identificação direta):
+**Fica retido**, sem identificação direta:
 
 | Registro | O que sobra | Atenção |
 | --- | --- | --- |
-| `appointments` | Serviço, profissional, data, horário e status, sem cliente | Visitantes sem conta (`guest_name`/`guest_phone`) não são afetados: apague pelo SQL Editor se pedirem |
-| `audit_logs` | Ação, data, identificadores internos (UUID) e motivo digitado | Imutável. O UUID não aponta mais para ninguém. **Não escreva nomes ou telefones nos motivos** |
-| `appointment_status_history` | Mudanças de status e motivo digitado | Imutável. Mesma regra para os motivos |
-| `privacy_requests` | Tipo, texto do pedido e resposta, sem cliente | O texto pode conter dado pessoal escrito pelo titular. Guarde só o necessário para comprovar o atendimento |
+| `appointments` | Serviço, profissional, data, horário e status, sem cliente | Atendimentos avulsos (`guest_name`/`guest_phone`) não têm ficha. Se pedirem, apague pelo SQL Editor |
+| `audit_logs` | Ação, data, identificador interno e motivo digitado | Imutável. **Não escreva nomes ou telefones nos motivos** |
+| `appointment_status_history` | Mudanças de status e motivo | Imutável. Mesma regra |
+| `privacy_requests` | O próprio pedido (nome e contato de quem pediu, resposta) | Prova do atendimento. Guarde só o necessário |
+| Mensagens no WhatsApp da barbearia | Conversas | Fora do sistema. A barbearia apaga no próprio WhatsApp |
+| Backups | O cadastro da data da cópia | Substitua ou apague as cópias no prazo combinado (recomendado: até 30 dias) |
 
-**Backups e cópias**
+Não diga ao titular que "tudo foi apagado" sem mencionar essas retenções.
 
-- Supabase Free: não há backup automático. As cópias são as do `pg_dump` que você fizer e contêm os
-  dados de antes da exclusão: apague ou substitua as cópias antigas no prazo combinado
-  (recomendado: até 30 dias).
-- Supabase Pro: os backups diários guardam os dados até expirarem (7 dias no Pro). Se restaurar um
-  backup, refaça as exclusões feitas depois da data dele.
-- Exportações (Minha conta → Baixar meus dados) ficam com o titular.
+### Navegador e cookies
 
-### Retenção
-
-- Conta: enquanto existir.
-- Pendente não confirmado: expira no prazo configurado.
-- Após a exclusão: ver a tabela acima.
-- Backups (`pg_dump`) também contêm dados pessoais: guarde cifrados, apague cópias antigas e não
-  os coloque no GitHub.
+- **Visitante**: nenhum cookie e nenhum armazenamento local (verificado no navegador).
+- **Equipe**: só a sessão de login no armazenamento local (`sb-…`), estritamente necessária, apagada ao
+  sair. Sem analytics e sem banner.
 
 ### Antes de publicar para um cliente real
 
-- Controlador correto em `site.config.ts → legal` (razão social e documento **informados pelo
-  cliente**, nunca inventados), e-mail de privacidade que alguém lê, `emailProvider` preenchido.
-- Revisar os textos de `/privacidade`, `/cookies` e `/termos` com o cliente.
-- Projeto Supabase próprio do cliente, de preferência numa conta dele (ou com termo de operador).
-- SMTP próprio configurado e e-mails de teste recebidos.
-- Nenhum dado real em testes, prints ou commits.
+- Controlador correto em `site.config.ts → legal`: razão social e documento **informados pelo cliente**,
+  nunca inventados. E-mail de privacidade que alguém leia.
+- Revisar `/privacidade`, `/cookies` e `/termos` com o cliente.
+- Projeto Supabase próprio do cliente, com cadastro público desligado e dois administradores.
+- Nenhum dado real em testes, capturas ou commits.

@@ -8,13 +8,10 @@ contorná-las chamando a API diretamente.
 
 | Configuração | Padrão | Efeito |
 | --- | --- | --- |
-| Antecedência mínima | 120 min | Horários mais próximos que isso não aparecem nem podem ser pedidos |
+| Antecedência mínima | 120 min | Horários mais próximos que isso não aparecem na consulta pública (o painel pode registrar) |
 | Dias à frente | 30 | Até quando a agenda fica aberta |
 | Intervalo entre horários | 15 min | Grade de inícios possíveis (09:00, 09:15...) |
-| Pendentes expiram em | 24 h | Pedido não confirmado nesse prazo vira **expirado** e libera o horário |
-| Horários em aberto por cliente | 3 | Máximo de pendentes + confirmados futuros por conta |
-| Pedidos por hora | 6 | Limite anti-abuso: pedidos feitos pelo próprio cliente (lançamentos do painel não contam) |
-| Cliente cancela até | 60 min antes | Depois disso, só a barbearia cancela |
+| "Aguardando resposta" expira em | 24 h | Registro marcado como aguardando o cliente que não for confirmado nesse prazo vira **expirado** e libera o horário |
 | Falta faz perder a cortesia | sim | Ver [PROGRAMA-FIDELIDADE.md](PROGRAMA-FIDELIDADE.md) |
 
 ## Quando um horário está livre
@@ -39,29 +36,31 @@ depois não altera horários já marcados.
 
 ```
             ┌──────────── expirado (prazo sem confirmação; horário liberado)
-pendente ───┼──────────── cancelado (cliente ou barbearia; horário liberado)
+pendente ───┼──────────── cancelado (horário liberado)
             └─ confirmado ─┬─ concluído (só depois do horário; gera ponto)
                            ├─ não compareceu (só depois do horário)
                            └─ cancelado
 concluído / não compareceu ── "Desfazer (corrigir)" ──▶ confirmado (exige motivo; estorna pontos)
 ```
 
-- Só o **administrador** muda status, exceto o cancelamento pelo próprio cliente dentro do prazo.
+- Só o **administrador** registra e muda status. O cliente não tem conta: pede, desmarca e remarca
+  pelo WhatsApp.
+- "Pendente" significa registrado pela barbearia e **aguardando a resposta do cliente**. O normal é
+  registrar já como **confirmado**, depois de combinar.
 - Não é possível concluir um horário que ainda não aconteceu.
 - Toda mudança vai para `appointment_status_history` (quem, quando, de → para, motivo).
 
-## Solicitação pelo cliente (`request_appointment`)
+## Consulta pública e registro pelo painel
 
-Recusada, com mensagem clara, quando:
-
-- a conta não confirmou o e-mail;
-- o horário não está mais livre (`ocupado`). A tela volta para a escolha de horário;
-- passou o limite de horários em aberto ou de pedidos por hora;
-- o horário está no passado, sem antecedência, fora do expediente, no intervalo ou numa exceção;
-- a cortesia escolhida não é do cliente, já foi usada ou não vale para esse serviço.
-
-Clique repetido ou reenvio com a mesma chave devolve o mesmo pedido (não duplica), inclusive quando as
-duas requisições chegam ao mesmo tempo: a segunda espera a primeira e recebe o mesmo protocolo.
+- **Público**: `available_slots`/`available_days` só **leem**. O visitante escolhe um horário livre e
+  manda o pedido pelo WhatsApp. **Nada é gravado nem reservado** (ver [FLUXO-WHATSAPP.md](FLUXO-WHATSAPP.md)).
+- **Painel** (`admin_create_appointment`): recusa com mensagem clara quando:
+  - o horário já tem outro agendamento do profissional (`ocupado`);
+  - o horário está no passado, fora do expediente, no intervalo ou numa exceção;
+  - a cortesia não é do cliente, já foi usada ou não vale para o serviço.
+- **Atendimento no balcão** ("Registrar atendimento"): registro já concluído, que pode ser fora do
+  expediente. Só a sobreposição com outro agendamento continua proibida.
+- Toque duplo (mesma chave) devolve o mesmo agendamento, inclusive de dois aparelhos ao mesmo tempo.
 
 ## Mudanças da barbearia e conflitos
 
@@ -80,13 +79,13 @@ horário. O sistema **nunca cancela em silêncio**:
 ### Operações simultâneas
 
 Toda operação que reserva horário ou muda a agenda de um profissional pega a **mesma trava por
-profissional** antes de ler a agenda: solicitação, reagendamento (cliente ou painel), agendamento
-manual, expediente e exceções. Expediente ou feriado para todos travam **todos** os profissionais,
+profissional** antes de ler a agenda: registro de agendamento ou atendimento, reagendamento,
+expediente e exceções. Expediente ou feriado para todos travam **todos** os profissionais,
 sempre na mesma ordem (por id), o que evita deadlock. Na prática:
 
-- se a barbearia está salvando um novo expediente ou bloqueio, a solicitação que chega no mesmo
-  instante espera e é validada já com a regra nova;
-- se uma solicitação acabou de ser gravada, a mudança da barbearia espera e mostra esse agendamento
+- se um aparelho está salvando um novo expediente ou bloqueio, o registro feito no mesmo instante em
+  outro aparelho espera e é validado já com a regra nova;
+- se um agendamento acabou de ser gravado, a mudança de expediente espera e mostra esse agendamento
   na lista de conflitos.
 
 A decisão sobre manter ou cancelar continua sendo do administrador.

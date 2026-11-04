@@ -1,55 +1,60 @@
-# Fluxo de confirmação pelo WhatsApp
+# Fluxo do pedido pelo WhatsApp
 
-O WhatsApp é **apenas um atalho de conversa**. Não há API paga, robô ou envio automático, e
-abrir o WhatsApp **não confirma** nada: quem confirma é a barbearia, no painel.
+O WhatsApp é o canal do pedido. Não há API paga, robô ou envio automático. **Enviar a mensagem não
+reserva o horário**: quem confirma é a barbearia, e só então ela registra no painel.
 
-## Passo a passo
+## Visitante (sem conta)
 
-1. O cliente revisa e toca em **Solicitar agendamento**.
-2. O banco valida a disponibilidade, grava o agendamento como **pendente** e gera um protocolo de
-   6 caracteres (ex.: `K7Q2MX`, sem letras ou números confundíveis).
-3. A tela mostra **"Solicitação registrada. Seu horário aguarda confirmação da barbearia."**, com
-   protocolo, serviço, profissional, data e horário.
-4. O botão verde **Enviar confirmação pelo WhatsApp** abre `https://wa.me/<número>?text=<mensagem>`.
-   O cliente vê a mensagem pronta e decide se envia.
-5. A barbearia recebe a mensagem, abre **Painel → Hoje** (lista "Aguardando confirmação") e toca em
-   **Confirmar**. Só então o status vira **confirmado** e aparece assim em Minha conta.
+1. Em **/agendar**: serviço → profissional (ou "sem preferência") → data → horário. Só aparecem
+   horários livres no momento da consulta.
+2. **Seus dados**: nome, telefone e observação opcional. Esses dados ficam só na memória da página:
+   não vão para o banco, não aparecem na URL e não ficam no navegador.
+3. **Preparar mensagem no WhatsApp**: a tela mostra "**Seu horário ainda não está reservado.**" e o
+   botão verde **Abrir o WhatsApp com a mensagem** (`https://wa.me/<número>?text=<mensagem>`).
+4. O visitante revisa e envia no WhatsApp.
 
-Se a barbearia não confirmar no prazo configurado (padrão 24 h), o pedido expira e o horário é liberado.
+Nenhuma tela diz "agendado", "reservado" ou "confirmado" nesse fluxo.
 
-## Mensagem enviada
+## Mensagem
 
 Montada em `src/lib/booking/whatsapp-confirmation.ts` (com teste):
 
 ```
-Olá, {nome da barbearia}! Gostaria de confirmar meu agendamento.
-Protocolo: K7Q2MX
-Nome: {nome do cliente}
+Olá, {nome da barbearia}! Gostaria de solicitar um horário.
 Serviço: Degradê
-Profissional: {profissional}
+Profissional: Lucas            (ou "sem preferência")
 Data: 10/11/2026
 Horário: 14:30
-Aguardo a confirmação. Obrigado!
+Nome: {nome}
+Telefone: (16) 99123-4567
+Observação: {se houver}
+Sei que o horário só fica reservado depois da confirmação de vocês.
 ```
 
-O horário é sempre o de Brasília (America/Sao_Paulo), mesmo que o celular do cliente esteja em outro fuso.
+O horário é sempre o de Brasília (America/Sao_Paulo).
+
+## Barbearia
+
+1. Recebe a mensagem no WhatsApp e responde.
+2. Combinado o horário, abre **Painel → Agenda → Registrar agendamento**:
+   - busca o cliente pelo telefone ou cadastra (nome e telefone);
+   - escolhe serviço, profissional, data e horário;
+   - escolhe a situação: **Confirmado com o cliente** ou **Aguardando resposta do cliente**.
+3. Se o horário já tiver sido ocupado, o painel recusa (a restrição de sobreposição vale sempre), e a
+   barbearia combina outro.
 
 ## Número da barbearia
 
-- Cadastrado em **Painel → Configurações → WhatsApp oficial**, no formato `55 + DDD + número`
-  (ex.: `5516991234567`). Muda na hora, sem novo deploy.
-- O banco recusa números inválidos ou de exemplo (sequências, repetidos), com a mesma regra do site.
-- **Vazio** (demonstração ou número ainda não confirmado): o link abre o WhatsApp **sem destinatário**,
-  e a tela avisa que não há número cadastrado. Nunca se envia para um número inventado.
-- Teste o número enviando uma mensagem a ele antes de salvar.
+- Em **Painel → Configurações → WhatsApp oficial** (`55 + DDD + número`). Muda na hora, sem deploy.
+- O banco recusa números inválidos ou de exemplo.
+- **Vazio** (demonstração): o link abre sem destinatário, e a tela avisa.
 
 ## Do painel para o cliente
 
-Cada agendamento no painel tem o botão **WhatsApp do cliente**, que abre conversa com o telefone do
-cadastro (sem texto automático). Use para avisar remarcações, cancelamentos por conflito ou atrasos.
+Cada agendamento tem o botão **WhatsApp do cliente**, que abre conversa com o telefone cadastrado
+(sem texto automático).
 
-## O que nunca acontece
+## Privacidade
 
-- Confirmação automática por ter aberto ou enviado a mensagem.
-- Envio de mensagens sem ação de uma pessoa.
-- Número do cliente exposto a outros clientes (só o painel vê telefones).
+O visitante decide o que envia. O conteúdo da mensagem passa pelo WhatsApp (Meta), que é um
+controlador independente. A política em `/privacidade` explica isso.

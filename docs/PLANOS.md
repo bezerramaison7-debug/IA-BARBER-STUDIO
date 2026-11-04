@@ -91,18 +91,17 @@ Tudo do Premium, mais o sistema de agendamento:
 
 | Recurso | Profissional |
 | --- | :---: |
-| Conta do cliente (nome, telefone, e-mail e senha), confirmação de e-mail e recuperação de senha | ✓ |
-| Agendamento online em tempo real: serviço → profissional → data → horário → solicitar | ✓ |
-| Solicitação pendente com protocolo e mensagem pronta no WhatsApp (sem API paga) | ✓ |
-| Minha conta: horários, cancelar/reagendar, histórico, dados, exportação LGPD | ✓ |
-| Painel: confirmar, concluir, faltas, agenda do dia e da semana, agendamento manual | ✓ |
+| Pedido de horário sem conta: serviço → profissional → data → horário livre → nome e telefone → WhatsApp | ✓ |
+| Painel no celular: agenda do dia e da semana, registrar agendamento, registrar atendimento no balcão | ✓ |
+| Cadastro de clientes (nome e telefone) com aviso de telefone repetido | ✓ |
 | Horários pelo painel: expediente, almoço, folgas, feriados, férias e bloqueios por profissional | ✓ |
 | Programa de fidelidade com cartões separados, cortesias e livro-razão auditável | ✓ |
-| Políticas de privacidade, cookies e termos ajustadas ao sistema de contas | ✓ |
+| Pedidos de privacidade registrados pelo painel, exportação e exclusão do cliente | ✓ |
+| Políticas de privacidade, cookies e termos ajustadas ao modelo sem conta | ✓ |
 
 Liga quando `plan: "profissional"` (ou `SITE_PLAN=profissional`) **e** o Supabase está configurado.
 Sem o Supabase, o site se comporta como Premium. Custos recorrentes possíveis (hospedagem, banco,
-e-mail, domínio) estão em [HOSPEDAGEM.md](HOSPEDAGEM.md). Instalação e manual:
+domínio; não há e-mail nem SMS) estão em [HOSPEDAGEM.md](HOSPEDAGEM.md). Instalação e manual:
 [ARQUITETURA-V3.md](ARQUITETURA-V3.md), [MANUAL-ADMIN.md](MANUAL-ADMIN.md).
 
 ### Upgrade de Premium para Profissional

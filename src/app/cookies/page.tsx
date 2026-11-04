@@ -22,7 +22,9 @@ export default function CookiesPage() {
       <Block title="Resumo">
         <p>
           Este site não usa cookies de estatística, publicidade ou rastreamento, e não compartilha sua navegação
-          com redes de anúncios. Por isso não mostramos aviso pedindo para aceitar cookies.
+          com redes de anúncios. Por isso não mostramos aviso pedindo para aceitar cookies. Os provedores de
+          hospedagem e banco de dados registram dados técnicos de acesso (como endereço IP), sem cookies; veja a
+          Política de Privacidade.
         </p>
       </Block>
 
@@ -30,13 +32,13 @@ export default function CookiesPage() {
         {accounts ? (
           <>
             <p>
-              Só um item, e apenas se você entrar na sua conta: a sessão de login, guardada no armazenamento local
-              do navegador (nome começando por <code>sb-</code>). Ela mantém você conectado entre uma página e
-              outra e é renovada automaticamente.
+              Para quem pede horário: nada. A página de pedido não grava cookies nem usa o armazenamento do
+              navegador; nome e telefone ficam só na memória da página até você abrir o WhatsApp.
             </p>
             <p>
-              É estritamente necessária para a conta funcionar, então não depende de consentimento. Ela é apagada
-              quando você toca em “Sair”. Você também pode apagá-la limpando os dados do site no navegador.
+              Para a equipe da barbearia: ao entrar no painel, a sessão de login fica no armazenamento local do
+              navegador (nome começando por <code>sb-</code>). Ela é estritamente necessária para o painel
+              funcionar, não depende de consentimento e é apagada ao tocar em “Sair”.
             </p>
           </>
         ) : (

@@ -36,15 +36,19 @@ textos: português do Brasil.
 
 - **Toda regra de negócio fica no banco** (`supabase/migrations/`): o navegador usa só a chave pública.
   A tela nunca é a única barreira. Leia `docs/ARQUITETURA-V3.md` antes de mudar agenda ou fidelidade.
+- **Cliente não tem conta.** O público só LÊ horários livres; nome e telefone do pedido nunca vão ao
+  banco nem à URL (só na mensagem do WhatsApp). Nenhuma função pública grava ou reserva. Login é só da
+  equipe (cadastro público desligado, sem SMTP). Clientes ficam em `customers`, só para o admin.
+- Telefone não autentica nem junta históricos (pode ser compartilhado ou reatribuído).
 - Tabela nova: RLS ligado, permissões explícitas em `..._permissoes.sql` e teste em
   `supabase/tests/seguranca.test.ts`. Escrita em agendamentos, pontos e recompensas só por função
   `SECURITY DEFINER` com `set search_path = ''`; erros com `public._fail(código, mensagem em pt-BR)`.
 - Migração já aplicada em algum projeto real não se edita: crie outra. Migração em produção só com aprovação.
 - Nunca use a chave secreta/`service_role` no site, em `NEXT_PUBLIC_*`, em commits ou logs.
-- Mensagem de confirmação: `buildConfirmationUrl` (`src/lib/booking/whatsapp-confirmation.ts`). Abrir o
-  WhatsApp nunca confirma: só o painel muda status.
-- Testes de banco e de tela só com dados fictícios (`@example.com`). Fora do escopo: pagamentos de
-  qualquer tipo, mensageria paga, app nativo.
+- Mensagem do pedido: `buildRequestUrl` (`src/lib/booking/whatsapp-confirmation.ts`). A interface nunca
+  diz que reservou: só o painel registra e confirma.
+- Testes de banco e de tela só com dados fictícios (`@example.com`). Fora do escopo: login de cliente,
+  SMTP/SMS, pagamentos de qualquer tipo, mensageria paga, app nativo.
 
 ## Regras do Next.js desta versão
 

@@ -140,9 +140,9 @@ Só se o cliente contratou o sistema da V3. Além dos passos acima:
 1. Confirme as informações comerciais com o cliente **antes** de configurar: nome do programa de
    fidelidade, regras dos cartões, prazos de cancelamento e de confirmação. Não preencha nada por
    suposição (nome, razão social, CNPJ ou número).
-2. `plan: "profissional"` e `legal.emailProvider` no `site.config.ts`.
-3. Crie o projeto Supabase, aplique as migrações e os dados reais, configure Auth e SMTP:
-   [HOSPEDAGEM.md](HOSPEDAGEM.md).
+2. `plan: "profissional"` no `site.config.ts`.
+3. Crie o projeto Supabase, aplique as migrações e os dados reais e desligue o cadastro público no Auth
+   (não há SMTP): [HOSPEDAGEM.md](HOSPEDAGEM.md).
 4. Variáveis do Supabase na hospedagem (chave publishable, nunca a secreta).
 5. Crie o primeiro administrador e configure pelo painel: WhatsApp oficial, profissionais, serviços,
    expediente, feriados e programa de fidelidade ([MANUAL-ADMIN.md](MANUAL-ADMIN.md)).
