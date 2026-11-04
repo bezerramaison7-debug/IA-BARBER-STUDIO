@@ -11,7 +11,9 @@ import { buildWhatsAppUrl, isValidBrazilianWhatsApp, normalizePhone } from "./wh
 export function getSiteUrl(config: SiteConfig): string {
   const explicit = process.env.NEXT_PUBLIC_SITE_URL?.trim();
   const vercel = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
-  const url = explicit || (vercel ? `https://${vercel}` : config.url);
+  // Na Netlify, `URL` é o endereço principal do site (domínio próprio, se houver), também nos previews.
+  const netlify = process.env.NETLIFY === "true" ? process.env.URL?.trim() : undefined;
+  const url = explicit || (vercel ? `https://${vercel}` : netlify || config.url);
   return url.replace(/\/+$/, "");
 }
 
