@@ -88,23 +88,31 @@ export async function as<T = Record<string, unknown>>(
   }
 }
 
-/** Cria uma conta de teste como o Supabase Auth faria (o trigger cria o perfil). */
-export async function createUser(
-  su: Client,
-  opts: { name?: string; phone?: string; confirmed?: boolean; email?: string } = {},
-): Promise<string> {
+/** Conta da EQUIPE, como o Supabase Auth faria ao criar o usuário (o trigger cria o perfil sem acesso). */
+export async function createUser(su: Client, opts: { name?: string; email?: string } = {}): Promise<string> {
   const id = randomUUID();
-  const email = opts.email ?? `teste-${id.slice(0, 8)}@example.com`;
+  const email = opts.email ?? `equipe-${id.slice(0, 8)}@example.com`;
   await su.query(
-    `insert into auth.users (id, email, raw_user_meta_data, email_confirmed_at) values ($1, $2, $3, $4)`,
-    [
-      id,
-      email,
-      JSON.stringify({ full_name: opts.name ?? "Cliente Teste", phone: opts.phone ?? "16991234567" }),
-      opts.confirmed === false ? null : new Date(),
-    ],
+    `insert into auth.users (id, email, raw_user_meta_data, email_confirmed_at) values ($1, $2, $3, now())`,
+    [id, email, JSON.stringify({ full_name: opts.name ?? "Equipe Teste" })],
   );
   return id;
+}
+
+let phoneSeq = 0;
+/** Telefone sintético válido (DDD 16, celular) diferente a cada chamada. */
+export function fakePhone(): string {
+  phoneSeq += 1;
+  return `169${String(58300000 + phoneSeq * 7919).slice(-8)}`;
+}
+
+/** Cliente da barbearia (sem login), como o painel cadastra. */
+export async function createCustomer(su: Client, opts: { name?: string; phone?: string } = {}): Promise<string> {
+  const { rows } = await su.query<{ id: string }>(
+    "insert into public.customers (full_name, phone) values ($1, $2) returning id",
+    [opts.name ?? "Cliente Teste", opts.phone ?? fakePhone()],
+  );
+  return rows[0]!.id;
 }
 
 export async function makeAdmin(su: Client, userId: string) {

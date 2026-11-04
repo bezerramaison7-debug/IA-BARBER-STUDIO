@@ -1,5 +1,6 @@
--- V3 · Regras de negócio no banco: perfis, auditoria, disponibilidade, agendamento,
+-- V3 · Regras de negócio no banco: equipe, clientes, auditoria, disponibilidade, agendamento,
 -- transições de status, fidelidade e privacidade.
+-- Clientes não têm login: o público só CONSULTA horários livres; toda gravação é do painel.
 --
 -- Convenções:
 -- - Funções chamadas pelo navegador são SECURITY DEFINER com search_path vazio e nomes
@@ -19,7 +20,7 @@ language sql stable security definer set search_path = ''
 as $$
   select exists (
     select 1 from public.profiles p
-    where p.id = auth.uid() and p.role = 'admin' and p.anonymized_at is null
+    where p.id = auth.uid() and p.role = 'admin'
   )
 $$;
 
@@ -30,20 +31,6 @@ begin
   if not public.is_admin() then
     perform public._fail('sem_permissao', 'Acesso restrito à administração da barbearia.');
   end if;
-end $$;
-
-create or replace function public._require_customer() returns uuid
-language plpgsql stable security definer set search_path = ''
-as $$
-declare v_id uuid := auth.uid();
-begin
-  if v_id is null then
-    perform public._fail('nao_autenticado', 'Entre na sua conta para continuar.');
-  end if;
-  if not exists (select 1 from public.profiles p where p.id = v_id and p.anonymized_at is null) then
-    perform public._fail('conta_indisponivel', 'Esta conta não está disponível.');
-  end if;
-  return v_id;
 end $$;
 
 create or replace function public._log(p_action text, p_entity text, p_entity_id text, p_details jsonb default '{}'::jsonb)
@@ -61,10 +48,11 @@ as $$ begin new.updated_at := now(); return new; end $$;
 create trigger profiles_touch before update on public.profiles for each row execute function public._touch_updated_at();
 create trigger appointments_touch before update on public.appointments for each row execute function public._touch_updated_at();
 create trigger settings_touch before update on public.business_settings for each row execute function public._touch_updated_at();
+create trigger customers_touch before update on public.customers for each row execute function public._touch_updated_at();
 
 -- Registros que não podem ser alterados nem apagados (nem pelo administrador).
--- Única exceção: a exclusão em cascata quando o usuário é apagado no Auth (direito de eliminação,
--- LGPD art. 18, VI). Ela vem do gatilho da chave estrangeira, por isso pg_trigger_depth() > 1;
+-- Única exceção: a exclusão em cascata quando um cliente é excluído (admin_delete_customer, direito
+-- de eliminação, LGPD art. 18, VI). Ela vem do gatilho da chave estrangeira, por isso pg_trigger_depth() > 1;
 -- um DELETE/UPDATE direto (API, painel ou SQL Editor) tem profundidade 1 e continua bloqueado.
 create or replace function public._immutable() returns trigger
 language plpgsql set search_path = ''
@@ -105,28 +93,58 @@ create trigger audit_schedules after insert or update or delete on public.barber
 create trigger audit_exceptions after insert or update or delete on public.schedule_exceptions for each row execute function public._audit_config_change();
 
 -- ---------------------------------------------------------------------------
+-- Clientes
+-- ---------------------------------------------------------------------------
+-- Telefone brasileiro no formato nacional (DDD + número), sem 55, zeros ou pontuação.
+create or replace function public.normalize_br_phone(p text) returns text
+language sql immutable set search_path = ''
+as $$
+  select case
+    when d ~ '^55[0-9]{10,11}$' then substr(d, 3)
+    when d ~ '^0[0-9]{10,11}$' then substr(d, 2)
+    else d
+  end
+  from (select regexp_replace(coalesce(p, ''), '[^0-9]', '', 'g') as d) x
+$$;
+
+create or replace function public._customers_normalize() returns trigger
+language plpgsql set search_path = ''
+as $$
+begin
+  new.full_name := btrim(regexp_replace(new.full_name, '\s+', ' ', 'g'));
+  new.phone := public.normalize_br_phone(new.phone);
+  new.notes := nullif(btrim(coalesce(new.notes, '')), '');
+  if tg_op = 'INSERT' then new.created_by := auth.uid(); end if;
+  return new;
+end $$;
+
+create trigger customers_normalize before insert or update on public.customers
+  for each row execute function public._customers_normalize();
+
+-- Auditoria do cadastro SEM copiar nome e telefone para o log imutável (que não pode ser apagado
+-- depois, num pedido de exclusão): registra só a ação e o identificador.
+create or replace function public._audit_customer_change() returns trigger
+language plpgsql security definer set search_path = ''
+as $$
+begin
+  perform public._log(lower(tg_op) || '_cliente', 'customers', coalesce(new.id, old.id)::text);
+  return coalesce(new, old);
+end $$;
+
+create trigger audit_customers after insert or update on public.customers
+  for each row execute function public._audit_customer_change();
+
+-- ---------------------------------------------------------------------------
 -- Perfis
 -- ---------------------------------------------------------------------------
--- Cria o perfil no cadastro (Supabase Auth). Valida no servidor os dados do formulário:
--- se nome ou telefone forem inválidos, o cadastro inteiro é recusado.
+-- Cria o perfil da equipe quando uma conta é criada no Supabase Auth (Authentication → Users →
+-- Add user; o cadastro público fica desligado). A conta nasce SEM acesso ao painel.
 create or replace function public.handle_new_user() returns trigger
 language plpgsql security definer set search_path = ''
 as $$
-declare
-  v_name text := btrim(coalesce(new.raw_user_meta_data ->> 'full_name', ''));
-  v_phone text := regexp_replace(coalesce(new.raw_user_meta_data ->> 'phone', ''), '[^0-9]', '', 'g');
-  v_marketing boolean;
 begin
-  if char_length(v_name) < 3 or char_length(v_name) > 120 then
-    raise exception using message = 'Informe o nome completo.', hint = 'cadastro_nome', errcode = 'P0001';
-  end if;
-  if v_phone !~ '^[0-9]{10,13}$' then
-    raise exception using message = 'Informe um telefone com DDD.', hint = 'cadastro_telefone', errcode = 'P0001';
-  end if;
-  -- Consentimento de marketing: opcional, desmarcado por padrão, separado do cadastro.
-  v_marketing := coalesce((new.raw_user_meta_data ->> 'marketing_opt_in')::boolean, false);
-  insert into public.profiles (id, full_name, phone, email, marketing_opt_in, marketing_opt_in_at)
-  values (new.id, v_name, v_phone, new.email, v_marketing, case when v_marketing then now() end);
+  insert into public.profiles (id, full_name, email)
+  values (new.id, nullif(btrim(coalesce(new.raw_user_meta_data ->> 'full_name', '')), ''), new.email);
   return new;
 end $$;
 
@@ -154,16 +172,13 @@ begin
   if new.role is distinct from old.role and coalesce(current_setting('app.role_change', true), '') <> 'on' then
     raise exception using message = 'O perfil de acesso não pode ser alterado por aqui.', hint = 'sem_permissao', errcode = 'P0001';
   end if;
-  if new.marketing_opt_in is distinct from old.marketing_opt_in then
-    new.marketing_opt_in_at := case when new.marketing_opt_in then now() end;
-  end if;
-  new.phone := regexp_replace(new.phone, '[^0-9]', '', 'g');
   return new;
 end $$;
 
 create trigger profiles_guard before update on public.profiles for each row execute function public._guard_profile_update();
 
--- Primeiro administrador: só pelo SQL Editor do Supabase (papel postgres). Sem EXECUTE para o app.
+-- Primeiro administrador (ou recuperação quando nenhum administrador consegue entrar): só pelo SQL
+-- Editor do Supabase (papel postgres). Sem EXECUTE para o app. Ver docs/SEGURANCA-LGPD.md.
 create or replace function public.bootstrap_first_admin(p_email text) returns text
 language plpgsql security definer set search_path = ''
 as $$
@@ -174,7 +189,7 @@ begin
   end if;
   select id into v_id from public.profiles where lower(email) = lower(btrim(p_email));
   if v_id is null then
-    raise exception 'Nenhuma conta com este e-mail. Crie a conta pelo site primeiro.';
+    raise exception 'Nenhuma conta com este e-mail. Crie em Authentication → Users → Add user.';
   end if;
   perform set_config('app.role_change', 'on', true);
   update public.profiles set role = 'admin' where id = v_id;
@@ -192,7 +207,7 @@ begin
   select role into v_old from public.profiles where id = p_user_id for update;
   if not found then perform public._fail('nao_encontrado', 'Conta não encontrada.'); end if;
   if v_old = 'admin' and p_role <> 'admin'
-     and (select count(*) from public.profiles where role = 'admin' and anonymized_at is null) <= 1 then
+     and (select count(*) from public.profiles where role = 'admin') <= 1 then
     perform public._fail('ultimo_admin', 'É preciso manter ao menos um administrador.');
   end if;
   perform set_config('app.role_change', 'on', true);
@@ -447,7 +462,7 @@ create trigger appointments_status_effects after update of status on public.appo
   for each row execute function public._apply_status_effects();
 
 -- ---------------------------------------------------------------------------
--- Agendamento (cliente)
+-- Agendamento (núcleo usado pelo painel)
 -- ---------------------------------------------------------------------------
 create or replace function public._problem_message(p_code text) returns text
 language sql immutable set search_path = ''
@@ -460,12 +475,12 @@ as $$
     when 'fora_expediente' then 'Este horário está fora do expediente.'
     when 'intervalo' then 'Este horário coincide com o intervalo do profissional.'
     when 'bloqueado' then 'Este horário está bloqueado pela barbearia.'
-    when 'ocupado' then 'Este horário acabou de ser reservado. Escolha outro.'
+    when 'ocupado' then 'Já existe um agendamento neste horário para este profissional.'
     else 'Horário indisponível.'
   end
 $$;
 
--- Núcleo compartilhado de criação (cliente e reagendamento). Chamado já com as travas.
+-- Núcleo de criação usado pelo painel (agendamento e atendimento no balcão).
 -- Trava os profissionais (mesma chave de _insert_appointment), sempre em ordem de id para que duas
 -- transações que travam vários profissionais nunca esperem uma pela outra em ciclo (deadlock).
 -- p_ids nulo = todos (expediente ou feriado global). Toda função que muda a agenda de um profissional
@@ -483,7 +498,8 @@ end $$;
 create or replace function public._insert_appointment(
   p_customer uuid, p_service_id text, p_barber_id uuid, p_start timestamptz,
   p_request_key uuid, p_reward_id uuid, p_notes text, p_status public.appointment_status,
-  p_client_rules boolean, p_guest_name text default null, p_guest_phone text default null
+  p_client_rules boolean, p_guest_name text default null, p_guest_phone text default null,
+  p_force boolean default false
 ) returns public.appointments
 language plpgsql security definer set search_path = ''
 as $$
@@ -502,8 +518,12 @@ begin
 
   v_end := p_start + make_interval(mins => v_service.duration_minutes);
   perform pg_advisory_xact_lock(hashtextextended(p_barber_id::text, 0));
-  v_problem := public._slot_problem(p_barber_id, p_start, v_end, null, p_client_rules, true);
-  if v_problem is not null then perform public._fail(v_problem, public._problem_message(v_problem)); end if;
+  -- p_force: registro retroativo ou fora do expediente (atendimento no balcão). Só a restrição de
+  -- sobreposição continua valendo, e ela vale sempre (appointments_no_overlap).
+  if not p_force then
+    v_problem := public._slot_problem(p_barber_id, p_start, v_end, null, p_client_rules, true);
+    if v_problem is not null then perform public._fail(v_problem, public._problem_message(v_problem)); end if;
+  end if;
 
   if p_reward_id is not null then
     select * into v_reward from public.loyalty_rewards where id = p_reward_id for update;
@@ -535,170 +555,49 @@ begin
   return v_row;
 end $$;
 
--- Solicitação de agendamento pelo cliente: sempre nasce PENDENTE.
--- p_request_key: gerado no navegador por tentativa; repetir a chamada não duplica.
--- p_barber_id nulo = primeiro profissional livre.
-create or replace function public.request_appointment(
-  p_service_id text, p_start timestamptz, p_request_key uuid,
-  p_barber_id uuid default null, p_reward_id uuid default null, p_notes text default null
-) returns jsonb
-language plpgsql volatile security definer set search_path = ''
-as $$
-declare
-  v_customer uuid := public._require_customer();
-  s record;
-  v_existing public.appointments;
-  v_row public.appointments;
-  v_barber uuid;
-  v_duration integer;
-begin
-  if p_request_key is null then perform public._fail('requisicao_invalida', 'Requisição inválida.'); end if;
-  -- Duas chamadas simultâneas com a mesma chave: a segunda espera a primeira e devolve o mesmo pedido.
-  perform pg_advisory_xact_lock(hashtextextended(p_request_key::text, 1));
-
-  select * into v_existing from public.appointments where request_key = p_request_key;
-  if found then
-    if v_existing.customer_id is distinct from v_customer then
-      perform public._fail('requisicao_invalida', 'Requisição inválida.');
-    end if;
-    return jsonb_build_object('id', v_existing.id, 'protocol', v_existing.protocol, 'status', v_existing.status, 'repetida', true);
-  end if;
-
-  if not exists (select 1 from auth.users u where u.id = v_customer and u.email_confirmed_at is not null) then
-    perform public._fail('email_nao_confirmado', 'Confirme seu e-mail antes de agendar. Enviamos um link quando você se cadastrou.');
-  end if;
-
-  perform public.expire_stale_appointments();
-  select * into s from public.business_settings where id = 1;
-
-  -- Limites contra spam: solicitações ativas e por hora, por conta.
-  if (select count(*) from public.appointments a where a.customer_id = v_customer
-      and a.status in ('pendente', 'confirmado') and a.starts_at > now()) >= s.max_active_requests then
-    perform public._fail('limite_ativos', 'Você já tem o máximo de horários em aberto. Cancele um ou aguarde a confirmação.');
-  end if;
-  -- Conta só os pedidos feitos pelo próprio cliente: lançamentos do painel em nome dele não bloqueiam.
-  if (select count(*) from public.appointments a where a.customer_id = v_customer
-      and a.created_by = v_customer and a.created_at > now() - interval '1 hour') >= s.max_requests_per_hour then
-    perform public._fail('limite_hora', 'Muitas solicitações em pouco tempo. Tente novamente mais tarde.');
-  end if;
-
-  if p_barber_id is null then
-    select sv.duration_minutes into v_duration from public.services sv where sv.id = p_service_id and sv.active;
-    select b.id into v_barber
-    from public.barbers b
-    join public.barber_services bs on bs.barber_id = b.id and bs.service_id = p_service_id
-    where b.active
-      and public._slot_problem(b.id, p_start, p_start + make_interval(mins => coalesce(v_duration, 0)), null, true, true) is null
-    order by b.sort, b.name
-    limit 1;
-    if v_barber is null then perform public._fail('ocupado', public._problem_message('ocupado')); end if;
-  else
-    v_barber := p_barber_id;
-  end if;
-
-  v_row := public._insert_appointment(v_customer, p_service_id, v_barber, p_start, p_request_key, p_reward_id, p_notes, 'pendente', true);
-  return jsonb_build_object('id', v_row.id, 'protocol', v_row.protocol, 'status', v_row.status, 'repetida', false);
-end $$;
-
-create or replace function public.cancel_my_appointment(p_appointment_id uuid, p_reason text default null) returns void
-language plpgsql security definer set search_path = ''
-as $$
-declare
-  v_customer uuid := public._require_customer();
-  a record;
-  v_notice integer;
-begin
-  select * into a from public.appointments where id = p_appointment_id for update;
-  if not found or a.customer_id is distinct from v_customer then
-    perform public._fail('nao_encontrado', 'Agendamento não encontrado.');
-  end if;
-  if a.status not in ('pendente', 'confirmado') or a.starts_at <= now() then
-    perform public._fail('nao_cancelavel', 'Este agendamento não pode mais ser cancelado pelo site.');
-  end if;
-  select customer_cancel_notice_minutes into v_notice from public.business_settings where id = 1;
-  if a.status = 'confirmado' and a.starts_at < now() + make_interval(mins => v_notice) then
-    perform public._fail('cancelamento_tardio', 'Faltando pouco tempo, fale com a barbearia pelo WhatsApp para cancelar.');
-  end if;
-  perform set_config('app.status_reason', coalesce(nullif(btrim(p_reason), ''), 'Cancelado pelo cliente'), true);
-  update public.appointments set status = 'cancelado' where id = p_appointment_id;
-end $$;
-
--- Reagendar = novo pedido PENDENTE + cancelamento do anterior, na mesma transação.
-create or replace function public.reschedule_my_appointment(
-  p_appointment_id uuid, p_new_start timestamptz, p_request_key uuid, p_barber_id uuid default null
-) returns jsonb
-language plpgsql security definer set search_path = ''
-as $$
-declare
-  v_customer uuid := public._require_customer();
-  a record;
-  v_reward uuid;
-  v_row public.appointments;
-  v_old uuid;
-begin
-  select barber_id into v_old from public.appointments where id = p_appointment_id;
-  perform public._lock_barbers(array[v_old, coalesce(p_barber_id, v_old)]);
-  select * into a from public.appointments where id = p_appointment_id for update;
-  if not found or a.customer_id is distinct from v_customer then
-    perform public._fail('nao_encontrado', 'Agendamento não encontrado.');
-  end if;
-  if a.status not in ('pendente', 'confirmado') or a.starts_at <= now() then
-    perform public._fail('nao_reagendavel', 'Este agendamento não pode mais ser reagendado pelo site.');
-  end if;
-  select id into v_reward from public.loyalty_rewards where appointment_id = a.id and status = 'reservado';
-
-  perform set_config('app.status_reason', 'Reagendado pelo cliente', true);
-  update public.appointments set status = 'cancelado' where id = a.id; -- libera a recompensa, se houver
-  v_row := public._insert_appointment(v_customer, a.service_id, coalesce(p_barber_id, a.barber_id), p_new_start,
-                                      p_request_key, v_reward, a.notes, 'pendente', true);
-  return jsonb_build_object('id', v_row.id, 'protocol', v_row.protocol, 'status', v_row.status);
-end $$;
-
 -- ---------------------------------------------------------------------------
 -- Agendamento (administração)
 -- ---------------------------------------------------------------------------
+-- Registro de agendamento pelo painel (pedido recebido pelo WhatsApp, telefone ou balcão).
+-- p_status 'concluido' + p_force = atendimento já realizado (gera ponto de fidelidade).
+-- p_reward_id: usa uma cortesia do cliente. p_request_key: clique repetido não duplica.
 create or replace function public.admin_create_appointment(
   p_service_id text, p_barber_id uuid, p_start timestamptz,
   p_customer_id uuid default null, p_guest_name text default null, p_guest_phone text default null,
-  p_status public.appointment_status default 'confirmado', p_notes text default null, p_force boolean default false
+  p_status public.appointment_status default 'confirmado', p_notes text default null, p_force boolean default false,
+  p_reward_id uuid default null, p_request_key uuid default null
 ) returns jsonb
 language plpgsql security definer set search_path = ''
 as $$
 declare
   v_row public.appointments;
-  v_service record;
+  v_existing public.appointments;
 begin
   perform public._require_admin();
+  perform public.expire_stale_appointments(); -- pendente vencido não pode segurar o horário
+  if p_request_key is not null then
+    perform pg_advisory_xact_lock(hashtextextended(p_request_key::text, 1));
+    select * into v_existing from public.appointments where request_key = p_request_key;
+    if found then
+      return jsonb_build_object('id', v_existing.id, 'protocol', v_existing.protocol, 'repetida', true);
+    end if;
+  end if;
   if p_customer_id is null and nullif(btrim(p_guest_name), '') is null then
-    perform public._fail('cliente_obrigatorio', 'Informe o cliente ou o nome de quem será atendido.');
+    perform public._fail('cliente_obrigatorio', 'Escolha o cliente ou informe o nome de quem será atendido.');
   end if;
   if p_status not in ('pendente', 'confirmado', 'concluido') then
     perform public._fail('status_invalido', 'Status inicial inválido.');
   end if;
-  if p_customer_id is not null and not exists (select 1 from public.profiles where id = p_customer_id and anonymized_at is null) then
+  if p_customer_id is not null and not exists (select 1 from public.customers where id = p_customer_id) then
     perform public._fail('nao_encontrado', 'Cliente não encontrado.');
   end if;
-
-  if p_force then
-    -- Registro retroativo ou fora do expediente: só não pode sobrepor outro agendamento.
-    select * into v_service from public.services where id = p_service_id;
-    if not found then perform public._fail('servico_indisponivel', 'Serviço não encontrado.'); end if;
-    perform pg_advisory_xact_lock(hashtextextended(p_barber_id::text, 0));
-    begin
-      insert into public.appointments (customer_id, guest_name, guest_phone, barber_id, service_id, service_name,
-        duration_minutes, starts_at, ends_at, status, notes, created_by)
-      values (p_customer_id, nullif(btrim(p_guest_name), ''), nullif(regexp_replace(coalesce(p_guest_phone, ''), '[^0-9]', '', 'g'), ''),
-        p_barber_id, p_service_id, v_service.name, v_service.duration_minutes, p_start,
-        p_start + make_interval(mins => v_service.duration_minutes), 'confirmado', nullif(btrim(p_notes), ''), auth.uid())
-      returning * into v_row;
-    exception when exclusion_violation then
-      perform public._fail('ocupado', public._problem_message('ocupado'));
-    end;
-  else
-    v_row := public._insert_appointment(p_customer_id, p_service_id, p_barber_id, p_start, null, null, p_notes,
-      'confirmado', false, nullif(btrim(p_guest_name), ''),
-      nullif(regexp_replace(coalesce(p_guest_phone, ''), '[^0-9]', '', 'g'), ''));
+  if p_reward_id is not null and p_customer_id is null then
+    perform public._fail('recompensa_invalida', 'A cortesia precisa de um cliente cadastrado.');
   end if;
+
+  v_row := public._insert_appointment(p_customer_id, p_service_id, p_barber_id, p_start, p_request_key, p_reward_id, p_notes,
+    'confirmado', false, case when p_customer_id is null then nullif(btrim(p_guest_name), '') end,
+    case when p_customer_id is null then nullif(public.normalize_br_phone(p_guest_phone), '') end, p_force);
 
   if p_status = 'concluido' then
     if v_row.starts_at > now() then perform public._fail('conclusao_futura', 'Só é possível concluir atendimentos que já começaram.'); end if;
@@ -707,8 +606,9 @@ begin
   elsif p_status = 'pendente' then
     update public.appointments set status = 'pendente' where id = v_row.id;
   end if;
-  perform public._log('criar_agendamento', 'appointments', v_row.id::text, jsonb_build_object('forcado', p_force));
-  return jsonb_build_object('id', v_row.id, 'protocol', v_row.protocol);
+  perform public._log('criar_agendamento', 'appointments', v_row.id::text,
+    jsonb_build_object('forcado', p_force, 'status', p_status, 'cortesia', p_reward_id is not null));
+  return jsonb_build_object('id', v_row.id, 'protocol', v_row.protocol, 'repetida', false);
 end $$;
 
 -- Transições permitidas (o painel só oferece estas):
@@ -799,11 +699,11 @@ as $$
   select coalesce(jsonb_agg(jsonb_build_object(
       'id', a.id, 'protocol', a.protocol, 'starts_at', a.starts_at, 'service_name', a.service_name,
       'barber_id', a.barber_id, 'status', a.status,
-      'customer_name', coalesce(p.full_name, a.guest_name),
+      'customer_name', coalesce(c.full_name, a.guest_name),
       'motivo', public._slot_problem(a.barber_id, a.starts_at, a.ends_at, a.id, false, false))
     order by a.starts_at), '[]'::jsonb)
   from public.appointments a
-  left join public.profiles p on p.id = a.customer_id
+  left join public.customers c on c.id = a.customer_id
   where a.status in ('pendente', 'confirmado') and a.starts_at > now()
     and (p_barber_id is null or a.barber_id = p_barber_id)
     and public._slot_problem(a.barber_id, a.starts_at, a.ends_at, a.id, false, false) is not null
@@ -934,12 +834,6 @@ as $$
   order by r.sort, r.name
 $$;
 
-create or replace function public.my_loyalty()
-returns table (rule_id uuid, name text, threshold integer, points integer,
-               reward_service_id text, reward_service_name text, available_rewards integer)
-language sql stable security definer set search_path = ''
-as $$ select * from public._loyalty_for(auth.uid()) where auth.uid() is not null $$;
-
 -- Ajuste manual: exige motivo e fica no histórico de auditoria.
 create or replace function public.admin_adjust_loyalty(p_customer_id uuid, p_rule_id uuid, p_delta integer, p_reason text)
 returns void
@@ -951,7 +845,7 @@ begin
   if char_length(btrim(coalesce(p_reason, ''))) < 5 then
     perform public._fail('motivo_obrigatorio', 'Informe o motivo do ajuste (mínimo 5 caracteres).');
   end if;
-  if not exists (select 1 from public.profiles where id = p_customer_id and anonymized_at is null) then
+  if not exists (select 1 from public.customers where id = p_customer_id) then
     perform public._fail('nao_encontrado', 'Cliente não encontrado.');
   end if;
   perform pg_advisory_xact_lock(hashtextextended(p_customer_id::text || p_rule_id::text, 0));
@@ -1005,12 +899,14 @@ begin
     'confirmados_hoje', (select count(*) from public.appointments where starts_at >= v_from and starts_at < v_to and status = 'confirmado'),
     'concluidos_hoje', (select count(*) from public.appointments where starts_at >= v_from and starts_at < v_to and status = 'concluido'),
     'cancelados_hoje', (select count(*) from public.appointments where starts_at >= v_from and starts_at < v_to and status in ('cancelado', 'nao_compareceu')),
-    'clientes', (select count(*) from public.profiles where role = 'cliente' and anonymized_at is null),
+    'clientes', (select count(*) from public.customers),
     'recompensas_disponiveis', (select count(*) from public.loyalty_rewards where status = 'disponivel')
   );
 end $$;
 
 -- Ficha do cliente: o acesso fica registrado (rastreabilidade de acesso a dados pessoais).
+-- mesmo_telefone: outros clientes com o mesmo número, para o administrador decidir se é a
+-- mesma pessoa (nunca há junção automática de históricos).
 create or replace function public.admin_get_customer(p_customer_id uuid) returns jsonb
 language plpgsql security definer set search_path = ''
 as $$
@@ -1018,42 +914,45 @@ declare v jsonb;
 begin
   perform public._require_admin();
   select jsonb_build_object(
-    'perfil', to_jsonb(p) - 'anonymized_at',
-    'fidelidade', coalesce((select jsonb_agg(to_jsonb(l)) from public._loyalty_for(p.id) l), '[]'::jsonb),
-    'recompensas', coalesce((select jsonb_agg(to_jsonb(w) order by w.created_at desc) from public.loyalty_rewards w where w.customer_id = p.id), '[]'::jsonb),
+    'cliente', to_jsonb(c),
+    'mesmo_telefone', coalesce((select jsonb_agg(jsonb_build_object('id', o.id, 'full_name', o.full_name) order by o.created_at)
+        from public.customers o where o.phone = c.phone and o.id <> c.id), '[]'::jsonb),
+    'fidelidade', coalesce((select jsonb_agg(to_jsonb(l)) from public._loyalty_for(c.id) l), '[]'::jsonb),
+    'recompensas', coalesce((select jsonb_agg(to_jsonb(w) order by w.created_at desc) from public.loyalty_rewards w where w.customer_id = c.id), '[]'::jsonb),
     'lancamentos', coalesce((select jsonb_agg(to_jsonb(e) order by e.created_at desc) from (
-        select x.* from public.loyalty_entries x where x.customer_id = p.id order by x.created_at desc limit 100) e), '[]'::jsonb),
+        select x.* from public.loyalty_entries x where x.customer_id = c.id order by x.created_at desc limit 100) e), '[]'::jsonb),
     'agendamentos', coalesce((select jsonb_agg(to_jsonb(a) order by a.starts_at desc) from (
-        select ap.id, ap.protocol, ap.service_name, ap.starts_at, ap.status, ap.is_reward, b.name as barber_name
+        select ap.id, ap.protocol, ap.service_id, ap.service_name, ap.starts_at, ap.status, ap.is_reward, b.name as barber_name
         from public.appointments ap join public.barbers b on b.id = ap.barber_id
-        where ap.customer_id = p.id order by ap.starts_at desc limit 50) a), '[]'::jsonb)
+        where ap.customer_id = c.id order by ap.starts_at desc limit 50) a), '[]'::jsonb)
   ) into v
-  from public.profiles p where p.id = p_customer_id;
+  from public.customers c where c.id = p_customer_id;
   if v is null then perform public._fail('nao_encontrado', 'Cliente não encontrado.'); end if;
-  perform public._log('consultar_cliente', 'profiles', p_customer_id::text);
+  perform public._log('consultar_cliente', 'customers', p_customer_id::text);
   return v;
 end $$;
 
 -- ---------------------------------------------------------------------------
--- Privacidade (LGPD)
+-- Privacidade (LGPD): pedidos chegam à barbearia e o administrador registra e atende
 -- ---------------------------------------------------------------------------
-create or replace function public.create_privacy_request(p_kind text, p_details text default null) returns uuid
+create or replace function public.admin_create_privacy_request(
+  p_kind text, p_requester_name text, p_contact text default null, p_channel text default 'whatsapp',
+  p_details text default null, p_customer_id uuid default null
+) returns uuid
 language plpgsql security definer set search_path = ''
 as $$
-declare
-  v_customer uuid := public._require_customer();
-  v_id uuid;
+declare v_id uuid;
 begin
-  if (select count(*) from public.privacy_requests where customer_id = v_customer and created_at > now() - interval '1 day') >= 5 then
-    perform public._fail('limite_hora', 'Muitas solicitações hoje. Tente novamente amanhã.');
-  end if;
+  perform public._require_admin();
   begin
-    insert into public.privacy_requests (customer_id, kind, details)
-    values (v_customer, p_kind, nullif(btrim(p_details), ''))
+    insert into public.privacy_requests (customer_id, requester_name, contact, channel, kind, details, created_by)
+    values (p_customer_id, btrim(coalesce(p_requester_name, '')), nullif(btrim(p_contact), ''), p_channel, p_kind,
+            nullif(btrim(p_details), ''), auth.uid())
     returning id into v_id;
-  exception when check_violation then
-    perform public._fail('dados_invalidos', 'Tipo de solicitação inválido ou texto longo demais.');
+  exception when check_violation or foreign_key_violation then
+    perform public._fail('dados_invalidos', 'Confira o tipo de pedido, o nome de quem pediu e o tamanho dos textos.');
   end;
+  perform public._log('privacidade_registrada', 'privacy_requests', v_id::text);
   return v_id;
 end $$;
 
@@ -1072,53 +971,52 @@ begin
   perform public._log('privacidade_' || p_status, 'privacy_requests', p_request_id::text);
 end $$;
 
--- Cópia dos próprios dados (direito de acesso, LGPD art. 18, II).
-create or replace function public.my_data_export() returns jsonb
+-- Cópia dos dados de um cliente para entregar ao titular (LGPD art. 18, II). Só o administrador
+-- gera, e cada exportação fica registrada.
+create or replace function public.admin_export_customer(p_customer_id uuid) returns jsonb
 language plpgsql security definer set search_path = ''
 as $$
-declare v_customer uuid := public._require_customer();
+declare v jsonb;
 begin
-  return jsonb_build_object(
+  perform public._require_admin();
+  select jsonb_build_object(
     'gerado_em', now(),
-    'perfil', (select to_jsonb(p) - 'anonymized_at' from public.profiles p where p.id = v_customer),
+    'cliente', jsonb_build_object('nome', c.full_name, 'telefone', c.phone, 'observacoes', c.notes, 'cadastrado_em', c.created_at),
     'agendamentos', coalesce((select jsonb_agg(jsonb_build_object(
         'protocolo', a.protocol, 'servico', a.service_name, 'inicio', a.starts_at, 'status', a.status,
-        'cortesia', a.is_reward, 'observacoes', a.notes, 'criado_em', a.created_at) order by a.starts_at desc)
-      from public.appointments a where a.customer_id = v_customer), '[]'::jsonb),
+        'cortesia', a.is_reward, 'observacoes', a.notes) order by a.starts_at desc)
+      from public.appointments a where a.customer_id = c.id), '[]'::jsonb),
     'fidelidade', coalesce((select jsonb_agg(jsonb_build_object('tipo', e.kind, 'pontos', e.delta, 'motivo', e.reason, 'em', e.created_at) order by e.created_at)
-      from public.loyalty_entries e where e.customer_id = v_customer), '[]'::jsonb),
-    'recompensas', coalesce((select jsonb_agg(jsonb_build_object('status', w.status, 'criada_em', w.created_at, 'usada_em', w.used_at))
-      from public.loyalty_rewards w where w.customer_id = v_customer), '[]'::jsonb),
-    'solicitacoes_privacidade', coalesce((select jsonb_agg(jsonb_build_object('tipo', r.kind, 'status', r.status, 'criada_em', r.created_at))
-      from public.privacy_requests r where r.customer_id = v_customer), '[]'::jsonb)
-  );
+      from public.loyalty_entries e where e.customer_id = c.id), '[]'::jsonb),
+    'cortesias', coalesce((select jsonb_agg(jsonb_build_object('status', w.status, 'criada_em', w.created_at, 'usada_em', w.used_at))
+      from public.loyalty_rewards w where w.customer_id = c.id), '[]'::jsonb)
+  ) into v
+  from public.customers c where c.id = p_customer_id;
+  if v is null then perform public._fail('nao_encontrado', 'Cliente não encontrado.'); end if;
+  perform public._log('exportar_cliente', 'customers', p_customer_id::text);
+  return v;
 end $$;
 
--- Exclusão a pedido do titular: remove os dados de identificação e mantém o histórico de
--- atendimentos desvinculado da pessoa. A conta de login é apagada depois, no painel do
--- Supabase (Authentication → Users), como descrito em docs/SEGURANCA-LGPD.md.
-create or replace function public.admin_anonymize_customer(p_customer_id uuid, p_reason text) returns void
+-- Exclusão a pedido do titular (LGPD art. 18, VI). Apaga o cadastro (nome, telefone, observações),
+-- os pontos e as cortesias; cancela horários futuros e apaga as observações dos agendamentos.
+-- FICA retido, sem identificação direta: os agendamentos (serviço, profissional, data, status), o
+-- histórico de status e o registro de auditoria (identificador interno + motivo). Backups seguem
+-- o próprio prazo. Ver docs/SEGURANCA-LGPD.md.
+create or replace function public.admin_delete_customer(p_customer_id uuid, p_reason text) returns void
 language plpgsql security definer set search_path = ''
 as $$
 begin
   perform public._require_admin();
-  if p_customer_id = auth.uid() then perform public._fail('sem_permissao', 'Você não pode anonimizar a própria conta.'); end if;
   if char_length(btrim(coalesce(p_reason, ''))) < 5 then
     perform public._fail('motivo_obrigatorio', 'Informe o motivo (mínimo 5 caracteres).');
   end if;
-  if not exists (select 1 from public.profiles where id = p_customer_id) then
+  if not exists (select 1 from public.customers where id = p_customer_id) then
     perform public._fail('nao_encontrado', 'Cliente não encontrado.');
   end if;
   perform set_config('app.status_reason', 'Cancelado: exclusão de dados a pedido do titular', true);
   update public.appointments set status = 'cancelado'
   where customer_id = p_customer_id and status in ('pendente', 'confirmado');
-  update public.loyalty_rewards set status = 'cancelado', appointment_id = null
-  where customer_id = p_customer_id and status in ('disponivel', 'reservado');
   update public.appointments set notes = null where customer_id = p_customer_id;
-  perform set_config('app.role_change', 'on', true);
-  update public.profiles
-  set full_name = 'Cliente removido', phone = '0000000000', email = null,
-      marketing_opt_in = false, role = 'cliente', anonymized_at = now()
-  where id = p_customer_id;
-  perform public._log('anonimizar_cliente', 'profiles', p_customer_id::text, jsonb_build_object('motivo', btrim(p_reason)));
+  delete from public.customers where id = p_customer_id; -- pontos e cortesias saem em cascata
+  perform public._log('excluir_cliente', 'customers', p_customer_id::text, jsonb_build_object('motivo', btrim(p_reason)));
 end $$;

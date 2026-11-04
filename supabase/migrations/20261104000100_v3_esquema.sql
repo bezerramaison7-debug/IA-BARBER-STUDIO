@@ -1,5 +1,7 @@
--- V3 · Esquema: agenda, agendamentos, fidelidade, auditoria e privacidade.
+-- V3 · Esquema: agenda, agendamentos, clientes, fidelidade, auditoria e privacidade.
 -- Uma instância (projeto Supabase) por barbearia: não há coluna de "empresa".
+-- Clientes NÃO têm conta: quem usa o login é só a equipe (profiles). Os clientes são
+-- cadastrados pela barbearia em "customers", visíveis apenas para o administrador.
 -- Horários são instantes timestamptz; o fuso da barbearia (America/Sao_Paulo) é aplicado
 -- nas funções que transformam "dia + hora local" em instante.
 
@@ -8,10 +10,11 @@ create extension if not exists btree_gist with schema extensions;
 -- ---------------------------------------------------------------------------
 -- Tipos
 -- ---------------------------------------------------------------------------
-create type public.app_role as enum ('cliente', 'admin', 'barbeiro');
+-- sem_acesso: conta criada no Supabase Auth que ainda não recebeu acesso ao painel.
+create type public.app_role as enum ('sem_acesso', 'admin');
 
 create type public.appointment_status as enum (
-  'pendente',        -- solicitado pelo cliente, aguarda confirmação da barbearia
+  'pendente',        -- registrado pela barbearia, aguardando a resposta do cliente
   'confirmado',      -- confirmado pelo administrador
   'concluido',       -- atendimento realizado (validado pelo administrador)
   'cancelado',
@@ -22,21 +25,17 @@ create type public.appointment_status as enum (
 -- ---------------------------------------------------------------------------
 -- Pessoas
 -- ---------------------------------------------------------------------------
--- Dados mínimos do cadastro: nome, telefone e e-mail (a senha fica no Supabase Auth).
+-- Equipe com login (Supabase Auth). Sem cadastro público: as contas são criadas no painel do
+-- Supabase e só ganham acesso quando um administrador as promove.
 create table public.profiles (
   id uuid primary key references auth.users (id) on delete cascade,
-  full_name text not null check (char_length(btrim(full_name)) between 3 and 120),
-  phone text not null check (phone ~ '^[0-9]{10,13}$'),
+  full_name text check (full_name is null or char_length(btrim(full_name)) between 2 and 120),
   email text,
-  role public.app_role not null default 'cliente',
-  marketing_opt_in boolean not null default false,
-  marketing_opt_in_at timestamptz,
-  anonymized_at timestamptz,
+  role public.app_role not null default 'sem_acesso',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
-comment on table public.profiles is 'Cadastro mínimo de clientes e administradores. Senha: Supabase Auth.';
-comment on column public.profiles.marketing_opt_in is 'Consentimento OPCIONAL e separado para comunicações promocionais.';
+comment on table public.profiles is 'Equipe da barbearia (login). Clientes ficam em customers, sem conta.';
 
 -- Profissionais. profile_id prepara um futuro perfil "barbeiro" com login próprio.
 create table public.barbers (
@@ -131,14 +130,29 @@ create table public.business_settings (
   max_days_ahead integer not null default 30 check (max_days_ahead between 1 and 180),
   slot_step_minutes integer not null default 15 check (slot_step_minutes in (5, 10, 15, 20, 30, 60)),
   pending_expiry_hours integer not null default 24 check (pending_expiry_hours between 1 and 168),
-  max_active_requests integer not null default 3 check (max_active_requests between 1 and 20),
-  max_requests_per_hour integer not null default 6 check (max_requests_per_hour between 1 and 60),
-  customer_cancel_notice_minutes integer not null default 60 check (customer_cancel_notice_minutes between 0 and 10080),
   reward_lost_on_no_show boolean not null default true,
   loyalty_program_name text not null default 'Clube de Fidelidade' check (char_length(loyalty_program_name) <= 60),
   updated_at timestamptz not null default now()
 );
 insert into public.business_settings (id) values (1);
+
+-- ---------------------------------------------------------------------------
+-- Clientes (cadastrados pela barbearia; sem login)
+-- ---------------------------------------------------------------------------
+-- Telefone nacional normalizado (DDD + número). NÃO é único: um número pode ser compartilhado
+-- (família) ou mudar de dono. O painel mostra os homônimos de telefone para o administrador
+-- decidir; o sistema nunca junta históricos sozinho, e o telefone não autentica ninguém.
+create table public.customers (
+  id uuid primary key default gen_random_uuid(),
+  full_name text not null check (char_length(btrim(full_name)) between 2 and 120),
+  phone text not null check (phone ~ '^[0-9]{10,11}$' and public.is_valid_br_whatsapp('55' || phone)),
+  notes text check (notes is null or char_length(notes) <= 300),
+  created_by uuid references public.profiles (id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index customers_phone_idx on public.customers (phone);
+create index customers_name_idx on public.customers (lower(full_name));
 
 -- ---------------------------------------------------------------------------
 -- Agendamentos
@@ -154,8 +168,8 @@ $$;
 create table public.appointments (
   id uuid primary key default gen_random_uuid(),
   protocol text not null unique default public.new_protocol(),
-  customer_id uuid references public.profiles (id) on delete set null,
-  -- Agendamento manual de quem não tem conta (sem fidelidade).
+  customer_id uuid references public.customers (id) on delete set null,
+  -- Atendimento avulso de quem não quis cadastro (sem fidelidade).
   guest_name text check (guest_name is null or char_length(btrim(guest_name)) between 2 and 120),
   guest_phone text check (guest_phone is null or guest_phone ~ '^[0-9]{10,13}$'),
   barber_id uuid not null references public.barbers (id),
@@ -214,7 +228,7 @@ create table public.loyalty_rules (
 -- Recompensas geradas. Uma recompensa reserva no máximo um agendamento por vez.
 create table public.loyalty_rewards (
   id uuid primary key default gen_random_uuid(),
-  customer_id uuid not null references public.profiles (id) on delete cascade,
+  customer_id uuid not null references public.customers (id) on delete cascade,
   rule_id uuid not null references public.loyalty_rules (id),
   status text not null default 'disponivel'
     check (status in ('disponivel', 'reservado', 'resgatado', 'perdido', 'cancelado')),
@@ -228,7 +242,7 @@ create index loyalty_rewards_customer_idx on public.loyalty_rewards (customer_id
 -- Livro-razão de fidelidade: só inserções. O saldo é a soma de "delta".
 create table public.loyalty_entries (
   id bigint generated always as identity primary key,
-  customer_id uuid not null references public.profiles (id) on delete cascade,
+  customer_id uuid not null references public.customers (id) on delete cascade,
   rule_id uuid not null references public.loyalty_rules (id),
   appointment_id uuid references public.appointments (id) on delete set null,
   reward_id uuid references public.loyalty_rewards (id) on delete set null,
@@ -255,14 +269,20 @@ create table public.audit_logs (
 );
 create index audit_logs_created_idx on public.audit_logs (created_at desc);
 
+-- Pedidos do titular (LGPD art. 18) recebidos pela barbearia (WhatsApp, e-mail ou balcão) e
+-- registrados pelo administrador. Nome e contato de quem pediu ficam para comprovar o atendimento.
 create table public.privacy_requests (
   id uuid primary key default gen_random_uuid(),
-  customer_id uuid references public.profiles (id) on delete set null,
-  kind text not null check (kind in ('acesso', 'correcao', 'exclusao', 'revogacao_consentimento', 'outro')),
+  customer_id uuid references public.customers (id) on delete set null,
+  requester_name text not null check (char_length(btrim(requester_name)) between 2 and 120),
+  contact text check (contact is null or char_length(contact) <= 120),
+  channel text not null default 'whatsapp' check (channel in ('whatsapp', 'email', 'presencial', 'outro')),
+  kind text not null check (kind in ('acesso', 'correcao', 'exclusao', 'oposicao', 'outro')),
   details text check (details is null or char_length(details) <= 1000),
   status text not null default 'aberta' check (status in ('aberta', 'em_andamento', 'concluida', 'recusada')),
   resolution text check (resolution is null or char_length(resolution) <= 1000),
   created_at timestamptz not null default now(),
   resolved_at timestamptz,
-  resolved_by uuid
+  resolved_by uuid,
+  created_by uuid references public.profiles (id) on delete set null
 );
