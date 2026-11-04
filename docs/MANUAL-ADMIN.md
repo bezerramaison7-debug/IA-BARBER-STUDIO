@@ -117,12 +117,16 @@ Toda alteração de configuração fica no registro de atividades.
 
 **Pedido de exclusão**:
 
-1. Abra a ficha do cliente → **Excluir dados (a pedido do titular)** → confirme e informe o motivo.
-   Nome, telefone e e-mail são removidos, horários futuros e cortesias são cancelados e a conta não
-   consegue mais agendar.
-2. Quem mantém o site apaga o login em **Supabase → Authentication → Users** (isso remove o e-mail de
-   acesso e o histórico de fidelidade; a agenda fica sem identificação).
-3. Marque o pedido como **Concluída**.
+1. Abra a ficha do cliente → **Excluir dados (a pedido do titular)** → confirme e informe o motivo
+   (sem repetir nome ou telefone no motivo). Nome, telefone e e-mail saem do cadastro da barbearia,
+   horários futuros e cortesias são cancelados e a conta não consegue mais agendar.
+   **Isto ainda não é a exclusão completa:** o login (e-mail, senha e os dados do cadastro) continua no
+   Supabase.
+2. Quem mantém o site apaga o login em **Supabase → Authentication → Users → Delete user**. Isso apaga o
+   acesso e o histórico de fidelidade, e a agenda fica sem identificação.
+3. Só então marque o pedido como **Concluída** e avise o titular. O que continua guardado (registros
+   sem identificação e backups até expirarem) está em
+   [SEGURANCA-LGPD.md](SEGURANCA-LGPD.md#exclusão-o-que-cada-etapa-faz).
 
 ## Boas práticas
 

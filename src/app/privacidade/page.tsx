@@ -92,9 +92,11 @@ export default function PrivacyPage() {
                 volta a ficar livre.
               </li>
               <li>
-                Se você pedir a exclusão, nome, telefone e e-mail são apagados ou anonimizados. Ficam apenas
-                registros sem identificação (por exemplo, que houve um corte em certa data), necessários para a
-                agenda e para estatísticas internas, além do que a lei obrigar a guardar.
+                Se você pedir a exclusão, a barbearia remove seu nome, telefone e e-mail do cadastro e depois
+                apaga sua conta de acesso. Ficam apenas registros sem identificação (por exemplo, que houve um
+                corte em certa data), necessários para a agenda, a segurança e estatísticas internas, além do
+                que a lei obrigar a guardar. Cópias de segurança anteriores ao pedido são apagadas quando
+                expiram.
               </li>
             </ul>
           </Block>

@@ -60,7 +60,8 @@ Recusada, com mensagem clara, quando:
 - o horário está no passado, sem antecedência, fora do expediente, no intervalo ou numa exceção;
 - a cortesia escolhida não é do cliente, já foi usada ou não vale para esse serviço.
 
-Clique repetido ou reenvio com a mesma chave devolve o mesmo pedido (não duplica).
+Clique repetido ou reenvio com a mesma chave devolve o mesmo pedido (não duplica), inclusive quando as
+duas requisições chegam ao mesmo tempo: a segunda espera a primeira e recebe o mesmo protocolo.
 
 ## Mudanças da barbearia e conflitos
 
@@ -75,6 +76,20 @@ horário. O sistema **nunca cancela em silêncio**:
    - **Salvar e cancelar estes agendamentos**: grava e cancela os listados, com motivo registrado.
      Avise cada cliente pelo botão de WhatsApp;
    - **Cancelar**: desiste da mudança.
+
+### Operações simultâneas
+
+Toda operação que reserva horário ou muda a agenda de um profissional pega a **mesma trava por
+profissional** antes de ler a agenda: solicitação, reagendamento (cliente ou painel), agendamento
+manual, expediente e exceções. Expediente ou feriado para todos travam **todos** os profissionais,
+sempre na mesma ordem (por id), o que evita deadlock. Na prática:
+
+- se a barbearia está salvando um novo expediente ou bloqueio, a solicitação que chega no mesmo
+  instante espera e é validada já com a regra nova;
+- se uma solicitação acabou de ser gravada, a mudança da barbearia espera e mostra esse agendamento
+  na lista de conflitos.
+
+A decisão sobre manter ou cancelar continua sendo do administrador.
 
 O agendamento manual pelo painel e o reagendamento seguem as mesmas regras. Lançar um atendimento
 passado (registro retroativo) é permitido apenas ao administrador.

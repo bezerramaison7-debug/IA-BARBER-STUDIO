@@ -40,7 +40,7 @@ npm run test:db
 | 12 | Cliente não acessa dados de outro cliente | `seguranca.test.ts`: "só enxerga os próprios dados", "não altera dados de outra pessoa", "não cancela agendamento de outra pessoa", "idempotência não vaza agendamento alheio…" |
 | 13 | Cliente não acessa painel admin | `seguranca.test.ts`: "não acessa nenhuma função administrativa", "edita o próprio nome… mas não o próprio papel" |
 | 14 | Admin bloqueia horário | `agenda.test.ts`: "bloqueio remove horários e respeita a decisão sobre conflitos", "feriado para todos… fecha o dia inteiro" |
-| 15 | Dois clientes não reservam o mesmo horário ao mesmo tempo | `agenda.test.ts`: "duas pessoas ao mesmo tempo…: exatamente uma consegue", "10 tentativas simultâneas com durações diferentes: nenhuma sobreposição" (conexões separadas, concorrência real) |
+| 15 | Dois clientes não reservam o mesmo horário ao mesmo tempo | `agenda.test.ts`: "duas pessoas ao mesmo tempo…: exatamente uma consegue", "10 tentativas simultâneas com durações diferentes: nenhuma sobreposição" (conexões separadas, concorrência real); `corrida.test.ts`: administração × solicitação e mesma chave simultânea |
 | 16 | Atendimento concluído incrementa fidelidade | `fidelidade.test.ts`: "10 cortes concluídos geram 1 corte grátis; os cartões são separados", "serviço fora do programa não pontua" |
 | 17 | Décimo atendimento gera recompensa | `fidelidade.test.ts`: mesmo teste do item 16; "conclusões simultâneas no 10º ponto geram uma única recompensa" |
 | 18 | Recompensa é usada só uma vez | `fidelidade.test.ts`: "agendamento com recompensa é cortesia…: consumida uma vez", "duas reservas simultâneas com a mesma recompensa: só uma passa", "recompensa de corte não vale para combo", "cliente não usa recompensa de outra pessoa" |
@@ -50,6 +50,17 @@ npm run test:db
 | 22 | Publicação real continua sujeita ao checklist | `validate-config.test.ts` (regras de site real no build); [CHECKLIST-PUBLICACAO-LGPD.md](CHECKLIST-PUBLICACAO-LGPD.md) atualizado com os itens da V3 |
 
 ## Testes adicionais
+
+- `corrida.test.ts` (transações coordenadas em conexões independentes; o teste espera a trava real em
+  `pg_stat_activity`, sem `sleep`):
+  - expediente reduzido pelo admin com solicitação concorrente: a solicitação espera e é recusada pela
+    regra nova;
+  - solicitação em andamento com o admin mudando o expediente: o admin espera e vê o conflito;
+  - feriado para todos: trava todos os profissionais, inclusive "sem preferência";
+  - expediente global, bloqueio e reagendamento ao mesmo tempo: nenhum deadlock;
+  - duas requisições simultâneas com a mesma `request_key`: um agendamento só, mesma resposta.
+- `fidelidade.test.ts`: desfazer o 10º atendimento depois da cortesia (política atual, ver
+  [PROGRAMA-FIDELIDADE.md](PROGRAMA-FIDELIDADE.md)).
 
 - `seguranca.test.ts`: visitante não vê dado pessoal; acesso à ficha auditado; WhatsApp inválido recusado
   no banco; último administrador protegido; `bootstrap_first_admin` só uma vez e fora do alcance do site;
