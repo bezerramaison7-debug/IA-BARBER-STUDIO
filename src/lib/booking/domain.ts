@@ -1,3 +1,4 @@
+import { isValidBrazilianWhatsApp } from "@/lib/whatsapp";
 /** Tipos e regras de apresentação da agenda (espelham o esquema do banco). */
 export type AppointmentStatus = "pendente" | "confirmado" | "concluido" | "cancelado" | "nao_compareceu" | "expirado";
 
@@ -63,24 +64,27 @@ export function loyaltyCardText(card: Pick<LoyaltyCard, "threshold" | "points" |
   return `Falta${missing === 1 ? "" : "m"} ${missing} atendimento${missing === 1 ? "" : "s"} para o seu próximo ${card.reward_service_name} gratuito.`;
 }
 
-export interface SignupInput {
+export interface ContactInput {
   fullName: string;
   phone: string;
-  email: string;
-  password: string;
 }
 
-/** Validação do cadastro (repetida no banco para nome e telefone). Só os 4 campos exigidos. */
-export function validateSignup(input: SignupInput): Partial<Record<keyof SignupInput, string>> {
-  const errors: Partial<Record<keyof SignupInput, string>> = {};
+/**
+ * Nome e telefone do visitante (só para montar a mensagem do WhatsApp; nada é gravado) e do
+ * cadastro de cliente no painel (o banco repete a validação do telefone).
+ */
+export function validateContact(input: ContactInput): Partial<Record<keyof ContactInput, string>> {
+  const errors: Partial<Record<keyof ContactInput, string>> = {};
   const name = input.fullName.trim();
-  if (name.length < 3 || !/\s/.test(name)) errors.fullName = "Informe nome e sobrenome.";
-  const digits = input.phone.replace(/\D/g, "");
-  if (!/^\d{10,11}$/.test(digits)) errors.phone = "Informe o telefone com DDD, só números ou com máscara.";
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(input.email.trim())) errors.email = "Informe um e-mail válido.";
-  const passwordError = validatePassword(input.password);
-  if (passwordError) errors.password = passwordError;
+  if (name.length < 2 || name.length > 120) errors.fullName = "Informe seu nome.";
+  const digits = input.phone.replace(/\D/g, "").replace(/^55(?=\d{10,11}$)/, "").replace(/^0(?=\d{10,11}$)/, "");
+  if (!isValidBrazilianWhatsApp(`55${digits}`)) errors.phone = "Informe um telefone com DDD, por exemplo (16) 99123-4567.";
   return errors;
+}
+
+/** Telefone no formato que o banco guarda (DDD + número). */
+export function phoneDigits(raw: string): string {
+  return raw.replace(/\D/g, "").replace(/^55(?=\d{10,11}$)/, "").replace(/^0(?=\d{10,11}$)/, "");
 }
 
 export function validatePassword(password: string): string | undefined {

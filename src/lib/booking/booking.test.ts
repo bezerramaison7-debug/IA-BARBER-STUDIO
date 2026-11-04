@@ -1,50 +1,58 @@
 import { describe, expect, it } from "vitest";
 import { addDays, dayKey, formatDate, formatDayKey, formatLongDate, formatTime, localToIso } from "./datetime";
-import { ADMIN_TRANSITIONS, isUpcoming, loyaltyCardText, needsReason, validateSignup } from "./domain";
+import { ADMIN_TRANSITIONS, isUpcoming, loyaltyCardText, needsReason, phoneDigits, validateContact } from "./domain";
 import { getSupabaseEnv, looksLikeSecretKey } from "./env";
 import { errorCode, friendlyError } from "./errors";
-import { buildConfirmationMessage, buildConfirmationUrl } from "./whatsapp-confirmation";
+import { buildRequestMessage, buildRequestUrl, formatBrPhone } from "./whatsapp-confirmation";
 
 const data = {
   businessName: "Barbearia Exemplo",
-  protocol: "K7Q2MX",
   customerName: "Ana Souza",
+  customerPhone: "16991234567",
   serviceName: "Degradê",
   barberName: "Profissional A",
   startsAt: "2026-11-10T17:30:00.000Z", // 14:30 em São Paulo
 };
 
-describe("mensagem de confirmação no WhatsApp", () => {
-  it("segue o modelo com protocolo, dados e horário local", () => {
-    expect(buildConfirmationMessage(data)).toBe(
+describe("mensagem de solicitação no WhatsApp", () => {
+  it("é um pedido, sem protocolo, com os dados escolhidos e o aviso de que depende de confirmação", () => {
+    expect(buildRequestMessage(data)).toBe(
       [
-        "Olá, Barbearia Exemplo! Gostaria de confirmar meu agendamento.",
-        "Protocolo: K7Q2MX",
-        "Nome: Ana Souza",
+        "Olá, Barbearia Exemplo! Gostaria de solicitar um horário.",
         "Serviço: Degradê",
         "Profissional: Profissional A",
         "Data: 10/11/2026",
         "Horário: 14:30",
-        "Aguardo a confirmação. Obrigado!",
+        "Nome: Ana Souza",
+        "Telefone: (16) 99123-4567",
+        "Sei que o horário só fica reservado depois da confirmação de vocês.",
       ].join("\n"),
     );
+    expect(buildRequestMessage(data)).not.toMatch(/protocolo|confirmad[oa]|reservad[oa]\./i);
+  });
+
+  it("sem preferência de profissional e com observação", () => {
+    const msg = buildRequestMessage({ ...data, barberName: null, notes: "  Prefiro máquina 2  " });
+    expect(msg).toContain("Profissional: sem preferência");
+    expect(msg).toContain("Observação: Prefiro máquina 2");
   });
 
   it("usa o número oficial válido, com a mensagem codificada", () => {
-    const { url, hasRecipient } = buildConfirmationUrl("5516991234567", data);
+    const { url, hasRecipient } = buildRequestUrl("5516991234567", data);
     expect(hasRecipient).toBe(true);
     const parsed = new URL(url);
     expect(parsed.origin + parsed.pathname).toBe("https://wa.me/5516991234567");
-    expect(parsed.searchParams.get("text")).toBe(buildConfirmationMessage(data));
+    expect(parsed.searchParams.get("text")).toBe(buildRequestMessage(data));
   });
 
   it("sem número válido (demonstração ou número de exemplo), abre sem destinatário", () => {
-    expect(buildConfirmationUrl("", data)).toMatchObject({ hasRecipient: false });
-    expect(buildConfirmationUrl("5516999999999", data).url).toMatch(/^https:\/\/wa\.me\/\?text=/);
+    expect(buildRequestUrl("", data)).toMatchObject({ hasRecipient: false });
+    expect(buildRequestUrl("5516999999999", data).url).toMatch(/^https:\/\/wa\.me\/\?text=/);
   });
 
-  it("identifica cortesia", () => {
-    expect(buildConfirmationMessage({ ...data, isReward: true })).toContain("Degradê (cortesia do programa de fidelidade)");
+  it("formata telefones brasileiros", () => {
+    expect(formatBrPhone("5516991234567")).toBe("(16) 99123-4567");
+    expect(formatBrPhone("1633221144")).toBe("(16) 3322-1144");
   });
 });
 
@@ -86,14 +94,13 @@ describe("regras de apresentação", () => {
     expect(isUpcoming("cancelado", "2999-01-01T00:00:00Z")).toBe(false);
   });
 
-  it("cadastro exige só nome, telefone, e-mail e senha válidos", () => {
-    expect(validateSignup({ fullName: "Ana Souza", phone: "(16) 99123-4567", email: "ana@example.com", password: "senha123" })).toEqual({});
-    expect(Object.keys(validateSignup({ fullName: "Ana", phone: "123", email: "x", password: "curta" })).sort()).toEqual([
-      "email",
-      "fullName",
-      "password",
-      "phone",
-    ]);
+  it("nome e telefone: valida e normaliza no formato nacional", () => {
+    expect(validateContact({ fullName: "Ana", phone: "(16) 99123-4567" })).toEqual({});
+    expect(validateContact({ fullName: "Ana", phone: "+55 16 99123-4567" })).toEqual({});
+    expect(Object.keys(validateContact({ fullName: " ", phone: "123" })).sort()).toEqual(["fullName", "phone"]);
+    expect(validateContact({ fullName: "Ana", phone: "(16) 99999-9999" }).phone).toBeTruthy(); // número de exemplo
+    expect(phoneDigits("+55 (16) 99123-4567")).toBe("16991234567");
+    expect(phoneDigits("016 99123-4567")).toBe("16991234567");
   });
 });
 

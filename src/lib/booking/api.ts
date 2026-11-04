@@ -2,6 +2,7 @@
 
 /**
  * Acesso a dados da V3. As telas usam só estas funções.
+ * Público: só leitura do catálogo e dos horários livres (nenhuma gravação). Login: só a equipe.
  * Toda regra de negócio e autorização está no banco (RLS + funções); aqui não há
  * nenhuma decisão de segurança, apenas chamadas e formatação dos resultados.
  */
@@ -14,10 +15,12 @@ export interface Barber { id: string; name: string; active: boolean; sort: numbe
 export interface Slot { slot_start: string; slot_end: string; barber_id: string; barber_name: string }
 export interface BusinessSettings {
   business_name: string; whatsapp: string; min_notice_minutes: number; max_days_ahead: number; slot_step_minutes: number;
-  pending_expiry_hours: number; max_active_requests: number; max_requests_per_hour: number;
-  customer_cancel_notice_minutes: number; reward_lost_on_no_show: boolean; loyalty_program_name: string;
+  pending_expiry_hours: number; reward_lost_on_no_show: boolean; loyalty_program_name: string;
 }
-export interface Profile { id: string; full_name: string; phone: string; email: string | null; role: "cliente" | "admin" | "barbeiro"; marketing_opt_in: boolean }
+/** Conta da equipe (login). */
+export interface Profile { id: string; full_name: string | null; email: string | null; role: "sem_acesso" | "admin" }
+/** Cliente cadastrado pela barbearia (sem login). */
+export interface Customer { id: string; full_name: string; phone: string; notes: string | null; created_at: string }
 export interface Appointment {
   id: string; protocol: string; customer_id: string | null; guest_name: string | null; guest_phone: string | null;
   barber_id: string; service_id: string; service_name: string; duration_minutes: number;
@@ -30,7 +33,10 @@ export interface ScheduleRow { barber_id: string; weekday: number; start_time: s
 export interface ScheduleException { id: string; barber_id: string | null; starts_at: string; ends_at: string; kind: string; reason: string | null }
 export interface Conflict { id: string; protocol: string; starts_at: string; service_name: string; customer_name: string | null; motivo: string }
 export interface LoyaltyRule { id: string; name: string; threshold: number; eligible_service_ids: string[]; reward_service_id: string; active: boolean; sort: number }
-export interface PrivacyRequest { id: string; customer_id: string | null; kind: string; details: string | null; status: string; resolution: string | null; created_at: string; customer?: { full_name: string; email: string | null } | null }
+export interface PrivacyRequest {
+  id: string; customer_id: string | null; requester_name: string; contact: string | null; channel: string; kind: string;
+  details: string | null; status: string; resolution: string | null; created_at: string;
+}
 
 export class NotConfiguredError extends Error {
   constructor() {
@@ -66,19 +72,6 @@ export const auth = {
     const { data } = sb().auth.onAuthStateChange((_event, session) => cb(session));
     return () => data.subscription.unsubscribe();
   },
-  async signUp(input: { fullName: string; phone: string; email: string; password: string; marketing: boolean; redirectTo: string }) {
-    const { data, error } = await sb().auth.signUp({
-      email: input.email.trim(),
-      password: input.password,
-      options: {
-        emailRedirectTo: input.redirectTo,
-        data: { full_name: input.fullName.trim(), phone: input.phone.replace(/\D/g, ""), marketing_opt_in: input.marketing },
-      },
-    });
-    if (error) throw error;
-    // Sessão nula = é preciso confirmar o e-mail antes de entrar.
-    return { needsConfirmation: !data.session };
-  },
   async signIn(email: string, password: string) {
     const { error } = await sb().auth.signInWithPassword({ email: email.trim(), password });
     if (error) throw error;
@@ -87,17 +80,8 @@ export const auth = {
     const { error } = await sb().auth.signOut();
     if (error) throw error;
   },
-  async requestPasswordReset(email: string, redirectTo: string) {
-    // A resposta é a mesma exista ou não a conta (não revela quem é cliente).
-    const { error } = await sb().auth.resetPasswordForEmail(email.trim(), { redirectTo });
-    if (error && (error as { status?: number }).status === 429) throw error;
-  },
   async updatePassword(password: string) {
     const { error } = await sb().auth.updateUser({ password });
-    if (error) throw error;
-  },
-  async verifyEmailLink(tokenHash: string, type: "signup" | "recovery" | "email" | "email_change" | "invite") {
-    const { error } = await sb().auth.verifyOtp({ token_hash: tokenHash, type });
     if (error) throw error;
   },
 };
@@ -119,41 +103,14 @@ export const catalog = {
   rules: () => rows<LoyaltyRule[]>(sb().from("loyalty_rules").select("*").order("sort")),
 };
 
-// ---------------------------------------------------------------- cliente
+// ---------------------------------------------------------------- conta da equipe
 export const me = {
   profile: async () => {
     const s = await auth.session();
     if (!s) return null;
-    return rows<Profile>(sb().from("profiles").select("id, full_name, phone, email, role, marketing_opt_in").eq("id", s.user.id).single());
-  },
-  updateProfile: async (id: string, patch: Partial<Pick<Profile, "full_name" | "phone" | "marketing_opt_in">>) => {
-    await rows(sb().from("profiles").update(patch).eq("id", id));
+    return rows<Profile>(sb().from("profiles").select("id, full_name, email, role").eq("id", s.user.id).single());
   },
   isAdmin: () => rpc<boolean>("is_admin"),
-  appointments: () =>
-    rows<Appointment[]>(sb().from("appointments").select("*, barber:barbers(name)").order("starts_at", { ascending: false }).limit(100)),
-  requestAppointment: (args: { serviceId: string; start: string; requestKey: string; barberId: string | null; rewardId: string | null; notes?: string }) =>
-    rpc<{ id: string; protocol: string; status: AppointmentStatus; repetida: boolean }>("request_appointment", {
-      p_service_id: args.serviceId,
-      p_start: args.start,
-      p_request_key: args.requestKey,
-      p_barber_id: args.barberId,
-      p_reward_id: args.rewardId,
-      p_notes: args.notes ?? null,
-    }),
-  cancel: (id: string, reason?: string) => rpc<void>("cancel_my_appointment", { p_appointment_id: id, p_reason: reason ?? null }),
-  reschedule: (id: string, start: string, requestKey: string, barberId: string | null) =>
-    rpc<{ id: string; protocol: string }>("reschedule_my_appointment", {
-      p_appointment_id: id,
-      p_new_start: start,
-      p_request_key: requestKey,
-      p_barber_id: barberId,
-    }),
-  loyalty: () => rpc<LoyaltyCard[]>("my_loyalty"),
-  rewards: () => rows<Reward[]>(sb().from("loyalty_rewards").select("*").order("created_at", { ascending: false })),
-  exportData: () => rpc<unknown>("my_data_export"),
-  privacyRequests: () => rows<PrivacyRequest[]>(sb().from("privacy_requests").select("*").order("created_at", { ascending: false })),
-  createPrivacyRequest: (kind: string, details: string) => rpc<string>("create_privacy_request", { p_kind: kind, p_details: details }),
 };
 
 // ---------------------------------------------------------------- administração
@@ -163,7 +120,7 @@ export const admin = {
     rows<Appointment[]>(
       sb()
         .from("appointments")
-        .select("*, barber:barbers(name), customer:profiles!appointments_customer_id_fkey(full_name, phone)")
+        .select("*, barber:barbers(name), customer:customers(full_name, phone)")
         .gte("starts_at", fromIso)
         .lt("starts_at", toIso)
         .order("starts_at"),
@@ -172,7 +129,7 @@ export const admin = {
     rows<Appointment[]>(
       sb()
         .from("appointments")
-        .select("*, barber:barbers(name), customer:profiles!appointments_customer_id_fkey(full_name, phone)")
+        .select("*, barber:barbers(name), customer:customers(full_name, phone)")
         .eq("status", "pendente")
         .gt("starts_at", new Date().toISOString())
         .order("starts_at"),
@@ -181,17 +138,26 @@ export const admin = {
     rpc<void>("admin_update_status", { p_appointment_id: id, p_status: status, p_reason: reason ?? null }),
   reschedule: (id: string, start: string, barberId: string | null) =>
     rpc<void>("admin_reschedule", { p_appointment_id: id, p_new_start: start, p_barber_id: barberId, p_force: false }),
-  createAppointment: (a: { serviceId: string; barberId: string; start: string; customerId: string | null; guestName: string | null; guestPhone: string | null; notes: string | null }) =>
-    rpc<{ id: string; protocol: string }>("admin_create_appointment", {
+  /**
+   * Registra um agendamento (pedido recebido pelo WhatsApp) ou, com status "concluido" e force,
+   * um atendimento já feito no balcão. requestKey: toque repetido não duplica.
+   */
+  createAppointment: (a: {
+    serviceId: string; barberId: string; start: string; customerId: string | null; guestName?: string | null; guestPhone?: string | null;
+    notes?: string | null; status?: "confirmado" | "pendente" | "concluido"; force?: boolean; rewardId?: string | null; requestKey: string;
+  }) =>
+    rpc<{ id: string; protocol: string; repetida: boolean }>("admin_create_appointment", {
       p_service_id: a.serviceId,
       p_barber_id: a.barberId,
       p_start: a.start,
       p_customer_id: a.customerId,
-      p_guest_name: a.guestName,
-      p_guest_phone: a.guestPhone,
-      p_status: "confirmado",
-      p_notes: a.notes,
-      p_force: false,
+      p_guest_name: a.guestName ?? null,
+      p_guest_phone: a.guestPhone ?? null,
+      p_status: a.status ?? "confirmado",
+      p_notes: a.notes ?? null,
+      p_force: a.force ?? false,
+      p_reward_id: a.rewardId ?? null,
+      p_request_key: a.requestKey,
     }),
   allBarbers: async (): Promise<Barber[]> => {
     const data = await rows<(Omit<Barber, "service_ids"> & { barber_services: { service_id: string }[] })[]>(
@@ -215,18 +181,30 @@ export const admin = {
       p_conflict_action: action,
     }),
   deleteException: (id: string) => rpc<void>("admin_delete_exception", { p_exception_id: id }),
+  /** Busca por nome ou telefone (só o admin enxerga clientes, pelo RLS). */
   searchCustomers: (term: string) => {
-    let q = sb().from("profiles").select("id, full_name, phone, email, role, marketing_opt_in").is("anonymized_at", null).order("full_name").limit(30);
-    const t = term.trim().replace(/[%,()]/g, "");
-    if (t) q = q.or(`full_name.ilike.%${t}%,phone.ilike.%${t.replace(/\D/g, "") || t}%,email.ilike.%${t}%`);
-    return rows<Profile[]>(q);
+    let q = sb().from("customers").select("id, full_name, phone, notes, created_at").order("full_name").limit(30);
+    const t = term.trim().replace(/[%,()*]/g, "");
+    const digits = t.replace(/\D/g, "");
+    if (digits.length >= 4) q = q.like("phone", `%${digits.replace(/^55(?=\d{10,11}$)/, "")}%`);
+    else if (t) q = q.ilike("full_name", `%${t}%`);
+    return rows<Customer[]>(q);
   },
+  /** Clientes com o mesmo telefone (normalizado no banco): para o admin decidir antes de cadastrar. */
+  customersByPhone: (phoneDigits: string) =>
+    rows<Customer[]>(sb().from("customers").select("id, full_name, phone, notes, created_at").eq("phone", phoneDigits).order("created_at")),
+  saveCustomer: (c: { id?: string; full_name: string; phone: string; notes?: string | null }) =>
+    c.id
+      ? rows<Customer>(sb().from("customers").update({ full_name: c.full_name, phone: c.phone, notes: c.notes ?? null }).eq("id", c.id).select("id, full_name, phone, notes, created_at").single())
+      : rows<Customer>(sb().from("customers").insert({ full_name: c.full_name, phone: c.phone, notes: c.notes ?? null }).select("id, full_name, phone, notes, created_at").single()),
   customer: (id: string) => rpc<CustomerSheet>("admin_get_customer", { p_customer_id: id }),
   adjustLoyalty: (customerId: string, ruleId: string, delta: number, reason: string) =>
     rpc<void>("admin_adjust_loyalty", { p_customer_id: customerId, p_rule_id: ruleId, p_delta: delta, p_reason: reason }),
   cancelReward: (rewardId: string, reason: string) => rpc<void>("admin_cancel_reward", { p_reward_id: rewardId, p_reason: reason }),
-  anonymize: (customerId: string, reason: string) => rpc<void>("admin_anonymize_customer", { p_customer_id: customerId, p_reason: reason }),
-  setRole: (userId: string, role: "cliente" | "admin") => rpc<void>("admin_set_role", { p_user_id: userId, p_role: role }),
+  exportCustomer: (customerId: string) => rpc<unknown>("admin_export_customer", { p_customer_id: customerId }),
+  deleteCustomer: (customerId: string, reason: string) => rpc<void>("admin_delete_customer", { p_customer_id: customerId, p_reason: reason }),
+  team: () => rows<Profile[]>(sb().from("profiles").select("id, full_name, email, role").order("email")),
+  setRole: (userId: string, role: "sem_acesso" | "admin") => rpc<void>("admin_set_role", { p_user_id: userId, p_role: role }),
   updateSettings: (patch: Partial<BusinessSettings>) => rows(sb().from("business_settings").update(patch).eq("id", 1)),
   saveService: (s: Partial<Service> & { id: string }) => rows(sb().from("services").upsert(s)),
   saveBarber: (b: { id?: string; name: string; active: boolean; sort: number }) =>
@@ -237,7 +215,16 @@ export const admin = {
   },
   saveRule: (r: Partial<LoyaltyRule> & { id?: string }) => rows(sb().from("loyalty_rules").upsert(r)),
   privacyRequests: () =>
-    rows<PrivacyRequest[]>(sb().from("privacy_requests").select("*, customer:profiles(full_name, email)").order("created_at", { ascending: false }).limit(100)),
+    rows<PrivacyRequest[]>(sb().from("privacy_requests").select("*").order("created_at", { ascending: false }).limit(100)),
+  createPrivacy: (r: { kind: string; requesterName: string; contact: string; channel: string; details: string; customerId: string | null }) =>
+    rpc<string>("admin_create_privacy_request", {
+      p_kind: r.kind,
+      p_requester_name: r.requesterName,
+      p_contact: r.contact,
+      p_channel: r.channel,
+      p_details: r.details,
+      p_customer_id: r.customerId,
+    }),
   resolvePrivacy: (id: string, status: string, resolution: string) =>
     rpc<void>("admin_resolve_privacy_request", { p_request_id: id, p_status: status, p_resolution: resolution }),
   auditLog: () => rows<{ id: number; action: string; entity: string; entity_id: string | null; created_at: string }[]>(
@@ -246,9 +233,10 @@ export const admin = {
 };
 
 export interface CustomerSheet {
-  perfil: Profile & { created_at: string; marketing_opt_in_at: string | null };
+  cliente: Customer;
+  mesmo_telefone: { id: string; full_name: string }[];
   fidelidade: LoyaltyCard[];
   recompensas: Reward[];
   lancamentos: { id: number; rule_id: string; delta: number; kind: string; reason: string | null; created_at: string }[];
-  agendamentos: { id: string; protocol: string; service_name: string; starts_at: string; status: AppointmentStatus; is_reward: boolean; barber_name: string }[];
+  agendamentos: { id: string; protocol: string; service_id: string; service_name: string; starts_at: string; status: AppointmentStatus; is_reward: boolean; barber_name: string }[];
 }

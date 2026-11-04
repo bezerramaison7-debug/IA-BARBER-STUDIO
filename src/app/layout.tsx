@@ -8,7 +8,6 @@ import { WhatsAppFab } from "@/components/layout/whatsapp-fab";
 import { isIndexable } from "@/lib/indexing";
 import { getBookingHref, getNavLinks } from "@/lib/navigation";
 import { isBookingSystemEnabled } from "@/lib/plan";
-import { appTexts } from "@/config/texts-app";
 import { getSiteUrl, getWhatsAppUrl } from "@/lib/site";
 import { getTexts } from "@/lib/texts";
 import { resolveThemeColors, themeToCssVars } from "@/lib/theme";
@@ -86,7 +85,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           demo={siteConfig.demo}
           links={getNavLinks(siteConfig, texts)}
           bookingHref={getBookingHref(onlineBooking)}
-          account={onlineBooking ? { href: "/minha-conta", label: appTexts.nav.account } : undefined}
           labels={{ booking: texts.nav.booking, menuOpen: texts.nav.menuOpen, menuClose: texts.nav.menuClose }}
         />
         <main id="conteudo" className="flex-1">
