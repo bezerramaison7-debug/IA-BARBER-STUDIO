@@ -1,3 +1,7 @@
+!IA
+
+Autoria: eu defini a ideia, os requisitos e as regras de negócio. A arquitetura e o código foram feitos por IA, sob minha orientação.
+
 # Barber Studio: template de site para barbearias
 
 Modelo de site profissional para barbearias de Araraquara/SP e região, personalizado e vendido para
