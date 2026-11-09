@@ -12,6 +12,10 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "monthly" as const,
       priority: 0.7,
     })),
-    { url: `${url}/privacidade`, changeFrequency: "yearly", priority: 0.2 },
+    ...["privacidade", "cookies", "termos"].map((page) => ({
+      url: `${url}/${page}`,
+      changeFrequency: "yearly" as const,
+      priority: 0.2,
+    })),
   ];
 }

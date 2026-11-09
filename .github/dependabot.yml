@@ -1,0 +1,25 @@
+# Atualizações automáticas de dependências (abre PRs; nada é mesclado sozinho).
+# Pacotes agrupados para gerar poucos PRs. Correções de segurança chegam fora do calendário.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      dependencias:
+        update-types: [minor, patch]
+    # Next e React mudam convenções entre majors (ver AGENTS.md): atualização major só manual.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]

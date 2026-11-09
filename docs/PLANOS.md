@@ -1,4 +1,4 @@
-# Planos: Essencial e Premium
+# Planos: Essencial, Premium e Profissional (proposta)
 
 Os dois planos são **o mesmo projeto**: o campo `plan` do `site.config.ts` liga e desliga recursos.
 Correções e melhorias valem para os dois. A regra está em `src/lib/plan.ts`.
@@ -81,3 +81,31 @@ Ao mudar cores, confira o contraste (mínimo 4.5:1) em
 1. Preencha `team`, `faq` e, se houver conteúdo, `page` nos serviços.
 2. Troque `plan: "essencial"` por `plan: "premium"`.
 3. Rode `npm test` e `npm run build`, revise e publique.
+
+## Profissional (proposta da V3)
+
+> **Decisão comercial pendente.** O nome, o preço e o que entra neste plano são sugestões. O código
+> já trata o plano como `profissional` e pode ser renomeado sem mudar a lógica.
+
+Tudo do Premium, mais o sistema de agendamento:
+
+| Recurso | Profissional |
+| --- | :---: |
+| Pedido de horário sem conta: serviço → profissional → data → horário livre → nome e telefone → WhatsApp | ✓ |
+| Painel no celular: agenda do dia e da semana, registrar agendamento, registrar atendimento no balcão | ✓ |
+| Cadastro de clientes (nome e telefone) com aviso de telefone repetido | ✓ |
+| Horários pelo painel: expediente, almoço, folgas, feriados, férias e bloqueios por profissional | ✓ |
+| Programa de fidelidade com cartões separados, cortesias e livro-razão auditável | ✓ |
+| Pedidos de privacidade registrados pelo painel, exportação e exclusão do cliente | ✓ |
+| Políticas de privacidade, cookies e termos ajustadas ao modelo sem conta | ✓ |
+
+Liga quando `plan: "profissional"` (ou `SITE_PLAN=profissional`) **e** o Supabase está configurado.
+Sem o Supabase, o site se comporta como Premium. Custos recorrentes possíveis (hospedagem, banco,
+domínio; não há e-mail nem SMS) estão em [HOSPEDAGEM.md](HOSPEDAGEM.md). Instalação e manual:
+[ARQUITETURA-V3.md](ARQUITETURA-V3.md), [MANUAL-ADMIN.md](MANUAL-ADMIN.md).
+
+### Upgrade de Premium para Profissional
+
+1. Crie e configure o projeto Supabase do cliente ([HOSPEDAGEM.md](HOSPEDAGEM.md#supabase-free)).
+2. Defina as variáveis na hospedagem e `plan: "profissional"`.
+3. Siga a seção 7 do [checklist](CHECKLIST-PUBLICACAO-LGPD.md).

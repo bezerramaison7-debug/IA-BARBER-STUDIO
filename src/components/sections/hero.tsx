@@ -5,7 +5,8 @@ import type { SiteConfig } from "@/config/types";
 import { buttonClasses } from "@/components/ui/button";
 import { ClockIcon, MapPinIcon } from "@/components/ui/icons";
 import { Container } from "@/components/ui/section";
-import { BOOKING_HREF } from "@/lib/navigation";
+import { getBookingHref } from "@/lib/navigation";
+import { isBookingSystemEnabled } from "@/lib/plan";
 import { OpenStatus } from "./open-status";
 
 export function Hero({ config, texts }: { config: SiteConfig; texts: SiteTexts }) {
@@ -40,7 +41,7 @@ export function Hero({ config, texts }: { config: SiteConfig; texts: SiteTexts }
         </p>
 
         <div className="animate-rise mt-10 flex flex-col gap-3 [animation-delay:300ms] sm:flex-row sm:gap-4">
-          <Link href={BOOKING_HREF} className={buttonClasses("primary")}>
+          <Link href={getBookingHref(isBookingSystemEnabled(config))} className={buttonClasses("primary")}>
             {texts.hero.primaryCta}
           </Link>
           <Link href="/#precos" className={buttonClasses("outline")}>

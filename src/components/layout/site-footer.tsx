@@ -37,11 +37,17 @@ export function SiteFooter({ config, texts, links }: SiteFooterProps) {
                 </Link>
               </li>
             ))}
-            <li>
-              <Link href="/privacidade" className="inline-flex min-h-11 items-center hover:text-accent">
-                {texts.footer.privacy}
-              </Link>
-            </li>
+            {[
+              ["/privacidade", texts.footer.privacy],
+              ["/cookies", texts.footer.cookies],
+              ["/termos", texts.footer.terms],
+            ].map(([href, label]) => (
+              <li key={href}>
+                <Link href={href} className="inline-flex min-h-11 items-center hover:text-accent">
+                  {label}
+                </Link>
+              </li>
+            ))}
           </ul>
         </nav>
 

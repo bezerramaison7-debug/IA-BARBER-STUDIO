@@ -20,8 +20,12 @@ describe("planos", () => {
       bookingForm: false,
       servicePages: false,
       customColors: false,
+      onlineBooking: false,
+      loyalty: false,
     });
-    expect(Object.values(getFeatures(premium)).every(Boolean)).toBe(true);
+    // Premium não muda com a V3: agenda e fidelidade ficam no plano profissional.
+    expect(getFeatures(premium)).toMatchObject({ team: true, faq: true, bookingForm: true, onlineBooking: false, loyalty: false });
+    expect(Object.values(getFeatures({ plan: "profissional" })).every(Boolean)).toBe(true);
   });
 
   it("SITE_PLAN no build sobrescreve o config", () => {
@@ -79,6 +83,12 @@ describe("indexação", () => {
     expect(isIndexable(false, { VERCEL_ENV: "preview" })).toBe(false);
     expect(isIndexable(false, {})).toBe(true);
     expect(isIndexable(false, { VERCEL_ENV: "production", SITE_NOINDEX: "1" })).toBe(false);
+  });
+
+  it("na Netlify, deploy preview e branch deploy ficam fora do Google", () => {
+    expect(isIndexable(false, { NETLIFY: "true", CONTEXT: "production" })).toBe(true);
+    expect(isIndexable(false, { NETLIFY: "true", CONTEXT: "deploy-preview" })).toBe(false);
+    expect(isIndexable(false, { NETLIFY: "true", CONTEXT: "branch-deploy" })).toBe(false);
   });
 });
 

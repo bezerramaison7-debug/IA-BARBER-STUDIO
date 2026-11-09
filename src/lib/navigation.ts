@@ -9,6 +9,12 @@ export interface NavLink {
 
 /** Âncora da área de agendamento (formulário no premium, bloco de WhatsApp no essencial). */
 export const BOOKING_HREF = "/#agendar";
+/** Fluxo de agendamento online da V3 (plano profissional com Supabase configurado). */
+export const ONLINE_BOOKING_HREF = "/agendar";
+
+export function getBookingHref(onlineBooking: boolean): string {
+  return onlineBooking ? ONLINE_BOOKING_HREF : BOOKING_HREF;
+}
 
 /** Links do menu de acordo com o plano: seções desligadas não aparecem. */
 export function getNavLinks(config: Pick<SiteConfig, "plan">, texts: SiteTexts): NavLink[] {
